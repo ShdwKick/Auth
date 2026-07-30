@@ -1,0 +1,53 @@
+# Локальная связка целиком: auth + «Мои финансы». Для проверки SSO-флоу на своей
+# машине, до всякого деплоя. Запускать из каталога Auth:
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Дальше открыть http://localhost:8787 — приложение уведёт на вход на 8788.
+# Первый аккаунт заводится прямо на странице входа (регистрация открыта).
+#
+# Оба сервиса ходят друг к другу по localhost-адресам ХОСТА, а не по именам
+# контейнеров: адрес auth должен быть одинаковым и для браузера, и для сервера —
+# он же claim iss в токенах.
+
+name: bh-dev
+
+services:
+  auth:
+    build: .
+    container_name: bh-auth-dev
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8788
+      ISSUER: http://localhost:8788
+      DEV: "1"                      # без Secure-куки, иначе по http вход не сработает
+      SEED_CLIENTS: >-
+        [{"client_id":"finance","name":"Мои финансы",
+          "redirect_uris":["http://localhost:8787/"],
+          "origins":["http://localhost:8787"]}]
+    ports:
+      - "127.0.0.1:8788:8788"
+    volumes:
+      - dev-auth-data:/app/data
+
+  finance:
+    build: ../Финансы
+    container_name: bh-finance-dev
+    depends_on: [auth]
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      AUTH_ISSUER: http://localhost:8788
+      AUTH_CLIENT_ID: finance
+      # Контейнеру localhost — это он сам, поэтому за JWKS ходим на хост.
+      AUTH_JWKS_URL: http://host.docker.internal:8788/.well-known/jwks.json
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - dev-finance-data:/app/data
+
+volumes:
+  dev-auth-data:
+  dev-finance-data:
