@@ -17,11 +17,11 @@ on:
 concurrency:
   group: publish-auth
   cancel-in-progress: false
-
+  
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    environment: MyServerEnv
+    environment: prod
     steps:
       - uses: actions/checkout@v4
 
