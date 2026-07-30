@@ -1,0 +1,48 @@
+# Продакшн-compose для сервера: тянет готовый образ из Docker Hub, ничего не собирает.
+# На сервере нужен только этот файл — исходники клонировать не обязательно.
+#
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Данные (аккаунты, сессии, ПРИВАТНЫЕ КЛЮЧИ ПОДПИСИ) лежат в volume auth-data
+# и переживают обновление образа. Потеря volume = разлогин всех пользователей
+# во всех сервисах, поэтому он в первую очередь идёт в бэкап.
+
+name: bh-auth
+
+services:
+  auth:
+    image: shadowkick/auth:latest
+    container_name: auth
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8788
+      # ОБЯЗАТЕЛЬНО и ровно тот адрес, по которому сервис доступен снаружи:
+      # он подписывается внутрь токенов (claim iss), и сервисы сверяют его побайтово.
+      ISSUER: https://auth.burninghouse.ru
+
+      # Сервисы-потребители. Можно вместо этого завести их разово командой
+      #   docker compose exec auth node server.js client-add finance "Мои финансы" https://money.burninghouse.ru/
+      # SEED_CLIENTS подтягивается при каждом старте и удобен тем, что список
+      # сервисов лежит рядом с конфигом, а не только в базе.
+      SEED_CLIENTS: >-
+        [{"client_id":"finance","name":"Мои финансы",
+          "redirect_uris":["https://money.burninghouse.ru/"],
+          "origins":["https://money.burninghouse.ru"]}]
+
+      # Первый аккаунт при пустой базе (на существующую базу не влияет):
+      # AUTH_USER: myname
+      # AUTH_PASS: my-strong-password
+
+      # Закрыть саморегистрацию:
+      # REGISTER_CODE: замените-на-свой-секрет   # регистрация по коду приглашения
+      # REGISTER_CLOSED: "1"                     # совсем закрыть, аккаунты только через CLI
+    ports:
+      # Только на localhost — наружу отдаёт nginx на 443 (см. README-deploy.md).
+      - "127.0.0.1:8788:8788"
+    volumes:
+      - auth-data:/app/data
+
+volumes:
+  auth-data:

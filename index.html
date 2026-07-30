@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Вход — BurningHouse</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<!-- Вход / регистрация. Показывается на /authorize без активной сессии и на / для гостя. -->
+<div class="card hidden" id="loginCard">
+  <div class="brand">
+    <svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V7l7-4z"/><path d="M9.5 12.2l1.8 1.8 3.4-3.6"/></svg>
+  </div>
+  <h1 id="loginTitle">Вход</h1>
+  <p class="sub" id="loginDesc">Единый аккаунт для сервисов BurningHouse.</p>
+
+  <form id="loginForm" autocomplete="on">
+    <div class="field">
+      <input id="fUser" name="username" type="text" placeholder=" " autocomplete="username" autocapitalize="none" spellcheck="false">
+      <label for="fUser">Логин</label>
+    </div>
+    <div class="field">
+      <input id="fPass" name="password" type="password" placeholder=" " autocomplete="current-password">
+      <label for="fPass">Пароль</label>
+    </div>
+    <div class="field hidden" id="fPass2Wrap">
+      <input id="fPass2" name="password2" type="password" placeholder=" " autocomplete="new-password">
+      <label for="fPass2">Повторите пароль</label>
+    </div>
+    <div class="field hidden" id="fEmailWrap">
+      <input id="fEmail" name="email" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false">
+      <label for="fEmail">Почта — необязательно</label>
+    </div>
+    <div class="field hidden" id="fCodeWrap">
+      <input id="fCode" name="code" type="text" placeholder=" " autocomplete="off">
+      <label for="fCode">Код приглашения</label>
+    </div>
+    <div class="err" id="loginErr"></div>
+    <button class="btn filled full" id="loginSubmit" type="submit">Войти</button>
+  </form>
+  <button class="btn full" id="loginToggle" type="button" style="margin-top:8px">Нет аккаунта? Зарегистрироваться</button>
+</div>
+
+<!-- Аккаунт: то, что видит вошедший пользователь на самом auth-домене. -->
+<div class="card wide hidden" id="accountCard">
+  <div class="who">
+    <div class="avatar" id="acAvatar">?</div>
+    <div>
+      <div class="name" id="acName">—</div>
+      <div class="mail" id="acMail">почта не указана</div>
+    </div>
+  </div>
+  <p class="sub">Этот аккаунт общий для всех сервисов BurningHouse.</p>
+
+  <details id="pwBlock">
+    <summary>Сменить пароль</summary>
+    <form id="pwForm">
+      <div class="field"><input id="pwCur" type="password" placeholder=" " autocomplete="current-password"><label for="pwCur">Текущий пароль</label></div>
+      <div class="field"><input id="pwNew" type="password" placeholder=" " autocomplete="new-password"><label for="pwNew">Новый пароль</label></div>
+      <div class="field"><input id="pwNew2" type="password" placeholder=" " autocomplete="new-password"><label for="pwNew2">Повторите новый</label></div>
+      <div class="err" id="pwErr"></div>
+      <button class="btn tonal full" type="submit">Сохранить пароль</button>
+    </form>
+    <p class="sub">После смены пароля все остальные устройства придётся авторизовать заново.</p>
+  </details>
+
+  <details id="mailBlock">
+    <summary>Почта</summary>
+    <form id="mailForm">
+      <div class="field"><input id="mailValue" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false"><label for="mailValue">Адрес почты</label></div>
+      <div class="field"><input id="mailPass" type="password" placeholder=" " autocomplete="current-password"><label for="mailPass">Текущий пароль</label></div>
+      <div class="err" id="mailErr"></div>
+      <button class="btn tonal full" type="submit">Сохранить почту</button>
+    </form>
+    <p class="sub">Пока используется только как контакт: писем сервис ещё не отправляет.</p>
+  </details>
+
+  <details id="sessBlock">
+    <summary>Устройства и сервисы</summary>
+    <div id="sessList"><div class="empty">Загрузка…</div></div>
+    <button class="btn danger full" id="revokeAll" type="button">Отозвать все доступы сервисов</button>
+  </details>
+
+  <button class="btn outlined full" id="logoutBtn" type="button">Выйти</button>
+</div>
+
+<div class="snack" id="snack"></div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

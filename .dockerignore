@@ -1,0 +1,8 @@
+data/
+.git
+.gitignore
+*.log
+node_modules/
+README-deploy.md
+deploy/
+client/

@@ -1,0 +1,29 @@
+# Локальная сборка и запуск auth-сервиса.
+# Для проверки связки с «Моими финансами» см. docker-compose.dev.yml в этом же каталоге —
+# он поднимает оба сервиса разом.
+
+name: bh-auth
+
+services:
+  auth:
+    build: .
+    image: bh-auth:latest
+    container_name: auth
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8788
+      # Публичный адрес сервиса. Попадает в iss токенов — на локальной машине
+      # обязан совпадать с тем, по какому адресу вы реально открываете страницу.
+      ISSUER: http://localhost:8788
+      DEV: "1"          # выключает Secure-куку (по http браузер её не отдаст)
+      # Первый аккаунт при пустой базе:
+      # AUTH_USER: myname
+      # AUTH_PASS: my-strong-password
+    ports:
+      - "127.0.0.1:8788:8788"
+    volumes:
+      - auth-data:/app/data
+
+volumes:
+  auth-data:

@@ -1,0 +1,170 @@
+/* Оформление auth-страниц. Токены и компоненты — те же, что в «Моих финансах»
+   (Material 3, violet seed), но взято только необходимое: форма входа и аккаунт. */
+
+:root{
+  --md-sys-color-primary:#5b4fe0;
+  --md-sys-color-on-primary:#ffffff;
+  --md-sys-color-primary-container:#e4dfff;
+  --md-sys-color-on-primary-container:#180265;
+  --md-sys-color-secondary-container:#e3e0f9;
+  --md-sys-color-on-secondary-container:#1a1836;
+  --md-sys-color-error:#ba1a1a;
+  --md-sys-color-surface:#fbf8ff;
+  --md-sys-color-on-surface:#1c1b20;
+  --md-sys-color-on-surface-variant:#46464f;
+  --md-sys-color-surface-container-lowest:#ffffff;
+  --md-sys-color-surface-container:#efecf4;
+  --md-sys-color-surface-container-high:#e9e6ee;
+  --md-sys-color-outline:#777680;
+  --md-sys-color-outline-variant:#c7c5d0;
+
+  --r-s:8px; --r-m:12px; --r-l:16px; --r-xl:28px; --r-full:9999px;
+  --md-font:"Roboto Flex","Segoe UI",system-ui,Roboto,sans-serif;
+  --ease-std:cubic-bezier(0.2,0,0,1);
+  --ease-emph-dec:cubic-bezier(0.05,0.7,0.1,1);
+  --e2:0 2px 6px rgba(0,0,0,.07),0 8px 20px rgba(0,0,0,.08);
+}
+
+/* Тема следует за системной; data-theme на <html> может её переопределить. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --md-sys-color-primary:#c6bfff;
+    --md-sys-color-on-primary:#2e1591;
+    --md-sys-color-primary-container:#4335a8;
+    --md-sys-color-on-primary-container:#e4dfff;
+    --md-sys-color-secondary-container:#45435c;
+    --md-sys-color-on-secondary-container:#e3e0f9;
+    --md-sys-color-error:#ffb4ab;
+    --md-sys-color-surface:#141318;
+    --md-sys-color-on-surface:#e5e1e9;
+    --md-sys-color-on-surface-variant:#c8c5d0;
+    --md-sys-color-surface-container-lowest:#0f0e13;
+    --md-sys-color-surface-container:#201f25;
+    --md-sys-color-surface-container-high:#2b2930;
+    --md-sys-color-outline:#918f9a;
+    --md-sys-color-outline-variant:#46464f;
+    --e2:0 2px 6px rgba(0,0,0,.3),0 8px 20px rgba(0,0,0,.35);
+  }
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{
+  font-family:var(--md-font);
+  background:var(--md-sys-color-surface);
+  color:var(--md-sys-color-on-surface);
+  display:grid;place-items:center;
+  padding:24px 16px;min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+
+.card{
+  background:var(--md-sys-color-surface-container-lowest);
+  border:1px solid var(--md-sys-color-outline-variant);
+  border-radius:var(--r-xl);
+  padding:28px;width:100%;max-width:400px;
+  box-shadow:var(--e2);
+  animation:pop .3s var(--ease-emph-dec);
+}
+.card.wide{max-width:520px}
+@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+
+.brand{
+  width:56px;height:56px;border-radius:var(--r-l);
+  display:grid;place-items:center;margin-bottom:16px;
+  background:var(--md-sys-color-primary-container);
+  color:var(--md-sys-color-on-primary-container);
+}
+.brand svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+h1{font-size:26px;font-weight:600;letter-spacing:-.01em}
+h2{font-size:15px;font-weight:600;margin:24px 0 4px}
+.sub{font-size:13px;color:var(--md-sys-color-on-surface-variant);margin:6px 0}
+.err{color:var(--md-sys-color-error);font-size:13px;min-height:18px;margin-top:10px}
+.ok{color:var(--md-sys-color-primary);font-size:13px;min-height:18px;margin-top:10px}
+.hidden{display:none !important}
+
+/* ---- outlined text field ---- */
+.field{position:relative;margin-top:12px}
+.field input{
+  width:100%;height:56px;padding:0 16px;font-size:16px;font-family:inherit;
+  color:var(--md-sys-color-on-surface);background:transparent;
+  border:1px solid var(--md-sys-color-outline);border-radius:var(--r-s);
+  transition:border-color .15s,border-width .15s;appearance:none;
+}
+.field input:focus{outline:none;border:2px solid var(--md-sys-color-primary);padding:0 15px}
+.field label{
+  position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  padding:0 4px;font-size:16px;color:var(--md-sys-color-on-surface-variant);
+  background:var(--md-sys-color-surface-container-lowest);
+  pointer-events:none;transition:all .15s var(--ease-std);
+}
+.field input:focus+label,
+.field input:not(:placeholder-shown)+label{top:0;transform:translateY(-50%) scale(.85)}
+.field input:focus+label{color:var(--md-sys-color-primary)}
+
+/* ---- buttons ---- */
+.btn{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  height:48px;padding:0 24px;border:0;border-radius:var(--r-full);
+  font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;overflow:hidden;
+  background:transparent;color:var(--md-sys-color-primary);
+}
+.btn::after{content:"";position:absolute;inset:0;background:currentColor;opacity:0;transition:opacity .2s}
+.btn:hover::after{opacity:.08}
+.btn:active::after{opacity:.12}
+.btn[disabled]{opacity:.5;cursor:default}
+.btn[disabled]::after{opacity:0}
+.btn.filled{background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary)}
+.btn.tonal{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
+.btn.outlined{border:1px solid var(--md-sys-color-outline)}
+.btn.full{width:100%;margin-top:18px}
+.btn.danger{color:var(--md-sys-color-error)}
+.btn.small{height:36px;font-size:13px;padding:0 14px}
+
+/* ---- аккаунт ---- */
+.who{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.avatar{
+  width:48px;height:48px;border-radius:var(--r-full);display:grid;place-items:center;
+  background:var(--md-sys-color-primary-container);color:var(--md-sys-color-on-primary-container);
+  font-size:20px;font-weight:600;flex:none;
+}
+.who .name{font-size:20px;font-weight:600;line-height:1.2}
+.who .mail{font-size:13px;color:var(--md-sys-color-on-surface-variant);word-break:break-all}
+
+details{
+  border:1px solid var(--md-sys-color-outline-variant);border-radius:var(--r-m);
+  padding:0 16px;margin-top:10px;
+}
+details[open]{padding-bottom:16px}
+summary{
+  cursor:pointer;list-style:none;padding:14px 0;font-size:15px;font-weight:600;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";width:8px;height:8px;flex:none;transform:rotate(45deg) translateY(-2px);
+  border-right:2px solid var(--md-sys-color-on-surface-variant);border-bottom:2px solid var(--md-sys-color-on-surface-variant);
+  transition:transform .2s var(--ease-std)}
+details[open] summary::after{transform:rotate(-135deg) translateY(-2px)}
+
+.session{
+  display:flex;align-items:flex-start;gap:12px;padding:12px 0;
+  border-top:1px solid var(--md-sys-color-outline-variant);
+}
+.session:first-of-type{border-top:0}
+.session .meta{flex:1;min-width:0}
+.session .title{font-size:14px;font-weight:600}
+.session .desc{font-size:12px;color:var(--md-sys-color-on-surface-variant);word-break:break-word}
+.badge{
+  font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--r-full);
+  background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);
+}
+.empty{font-size:13px;color:var(--md-sys-color-on-surface-variant);padding:12px 0}
+
+.snack{
+  position:fixed;left:50%;bottom:24px;transform:translate(-50%,80px);
+  background:var(--md-sys-color-on-surface);color:var(--md-sys-color-surface);
+  padding:14px 20px;border-radius:var(--r-s);font-size:14px;
+  opacity:0;transition:all .25s var(--ease-emph-dec);pointer-events:none;z-index:10;
+}
+.snack.show{transform:translate(-50%,0);opacity:1}
