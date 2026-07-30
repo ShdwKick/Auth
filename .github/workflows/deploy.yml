@@ -1,11 +1,11 @@
 name: Build and publish
 
-# Пуш в master -> собираем образ и пушим в Docker Hub. На сервер этот workflow НЕ ходит:
+# Пуш в main -> собираем образ и пушим в Docker Hub. На сервер этот workflow НЕ ходит:
 # новый образ забирает Watchtower, который там крутится (см. deploy/watchtower-compose.yml).
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths-ignore:
       - '**.md'
       - 'deploy/**'

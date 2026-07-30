@@ -145,8 +145,8 @@ Watchtower потом не сможет обновлять.
 не появился, `pull` ругается `manifest unknown`. Два способа:
 
 **Через CI (правильный, нужен для автообновления).** Завести в GitHub-репозитории
-секреты `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN` в окружении `MyServerEnv` и запушить
-в `master` — Actions соберёт и опубликует. Дальше это происходит само при каждом пуше.
+секреты `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN` в окружении `prod` и запушить
+в `main` — Actions соберёт и опубликует. Дальше это происходит само при каждом пуше.
 
 **Собрать на сервере (быстро, разово).** Годится, чтобы поднять сервис сейчас же:
 
@@ -234,9 +234,9 @@ labels:
   com.centurylinklabs.watchtower.enable: "true"
 ```
 
-**В репозитории** нужны только два секрета (Environment `MyServerEnv`):
+**В репозитории** нужны только два секрета (Environment `prod`):
 `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN` (именно Access Token с hub.docker.com, не
-пароль аккаунта). Дальше пуш в `master` собирает и публикует образ, Watchtower
+пароль аккаунта). Дальше пуш в `main` собирает и публикует образ, Watchtower
 подхватывает его в пределах интервала опроса.
 
 Проверка, что установка удалась: в `docker compose logs watchtower` должна быть строка
