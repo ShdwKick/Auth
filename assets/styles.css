@@ -59,7 +59,13 @@ body{
 }
 
 .card{
-  background:var(--md-sys-color-surface-container-lowest);
+  /* Поднимаем над горящим фоном (.bh-backdrop лежит на z-index:0) */
+  position:relative;z-index:1;
+  /* Полупрозрачная с размытием: фон обязан просвечивать, иначе горящий дом
+     виден только по краям и вся затея теряет смысл. Блюр здесь дёшев — он
+     ограничен площадью карточки, в отличие от блюра на весь экран. */
+  background:color-mix(in srgb,var(--md-sys-color-surface-container-lowest) 84%,transparent);
+  backdrop-filter:blur(16px) saturate(1.15);
   border:1px solid var(--md-sys-color-outline-variant);
   border-radius:var(--r-xl);
   padding:28px;width:100%;max-width:400px;
@@ -69,13 +75,10 @@ body{
 .card.wide{max-width:520px}
 @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
 
-.brand{
-  width:56px;height:56px;border-radius:var(--r-l);
-  display:grid;place-items:center;margin-bottom:16px;
-  background:var(--md-sys-color-primary-container);
-  color:var(--md-sys-color-on-primary-container);
-}
-.brand svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* Локап: знак, бренд, при необходимости — название сервиса.
+   Прежняя плашка со щитом (.brand) убрана — знак теперь фирменный. */
+.brand-lockup{margin-bottom:18px;font-size:16px}
+.brand-lockup:focus-visible{outline:2px solid var(--md-sys-color-primary);outline-offset:4px;border-radius:6px}
 
 h1{font-size:26px;font-weight:600;letter-spacing:-.01em}
 h2{font-size:15px;font-weight:600;margin:24px 0 4px}
@@ -96,7 +99,9 @@ h2{font-size:15px;font-weight:600;margin:24px 0 4px}
 .field label{
   position:absolute;left:12px;top:50%;transform:translateY(-50%);
   padding:0 4px;font-size:16px;color:var(--md-sys-color-on-surface-variant);
-  background:var(--md-sys-color-surface-container-lowest);
+  /* Та же прозрачность, что у карточки: иначе подпись легла бы на неё
+     непрозрачной заплаткой заметно другого оттенка. */
+  background:color-mix(in srgb,var(--md-sys-color-surface-container-lowest) 84%,transparent);
   pointer-events:none;transition:all .15s var(--ease-std);
 }
 .field input:focus+label,

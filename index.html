@@ -7,15 +7,36 @@
 <meta name="color-scheme" content="light dark">
 <title>Вход — BurningHouse</title>
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/brand.css">
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
 
+<!-- Горящий дом за карточкой. Вариант «Угли»: почти статика и медленный проход
+     света — страницу входа при активной SSO-сессии показывают на долю секунды,
+     и эффектный разгон читался бы как тормоз. См. Design/motion.md. -->
+<div class="bh-backdrop" aria-hidden="true">
+  <div class="bh-layer"><div class="bh-glow"></div></div>
+  <div class="bh-layer"><div class="bh-sweep"></div></div>
+  <div class="bh-layer"><div class="bh-haze"></div></div>
+  <div class="bh-layer bh-sparks" data-bh-sparks="6"></div>
+</div>
+
 <!-- Вход / регистрация. Показывается на /authorize без активной сессии и на / для гостя. -->
 <div class="card hidden" id="loginCard">
-  <div class="brand">
-    <svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V7l7-4z"/><path d="M9.5 12.2l1.8 1.8 3.4-3.6"/></svg>
-  </div>
+  <a class="bh-lockup brand-lockup" href="/">
+    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
+      <defs>
+        <linearGradient id="bhFlameLogin" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+        </linearGradient>
+      </defs>
+      <path class="bh-flame" fill="url(#bhFlameLogin)" fill-rule="evenodd"
+            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+    </svg>
+    <span class="bh-name">BurningHouse</span>
+  </a>
   <h1 id="loginTitle">Вход</h1>
   <p class="sub" id="loginDesc">Единый аккаунт для сервисов BurningHouse.</p>
 
@@ -48,6 +69,21 @@
 
 <!-- Аккаунт: то, что видит вошедший пользователь на самом auth-домене. -->
 <div class="card wide hidden" id="accountCard">
+  <a class="bh-lockup brand-lockup" href="/">
+    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
+      <defs>
+        <linearGradient id="bhFlameAccount" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+        </linearGradient>
+      </defs>
+      <path class="bh-flame" fill="url(#bhFlameAccount)" fill-rule="evenodd"
+            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+    </svg>
+    <span class="bh-name">BurningHouse</span>
+    <span class="bh-sep" aria-hidden="true"></span>
+    <span class="bh-service">Аккаунт</span>
+  </a>
   <div class="who">
     <div class="avatar" id="acAvatar">?</div>
     <div>
@@ -91,6 +127,7 @@
 
 <div class="snack" id="snack"></div>
 
+<script src="assets/brand.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>

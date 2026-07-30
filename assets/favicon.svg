@@ -1,4 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#5b4fe0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M12 3l7 4v5c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V7l7-4z"/>
-  <path d="M9.5 12.2l1.8 1.8 3.4-3.6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" role="img" aria-label="BurningHouse">
+  <!-- Вход: дерево — янтарное пламя. Цвета вписаны, а не через var():
+       в фавиконе CSS-переменные не работают. Контур — версия для мелких
+       размеров (вырез дома крупнее), исходники в BurningHouse/Design/assets. -->
+  <defs>
+    <linearGradient id="f" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#c2410c"/>
+      <stop offset="1" stop-color="#ffa62b"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#f)" fill-rule="evenodd"
+        d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.0 6.6 13.3V19.9H17.4V13.3Z"/>
 </svg>
