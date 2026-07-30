@@ -49,17 +49,24 @@
       <input id="fPass" name="password" type="password" placeholder=" " autocomplete="current-password">
       <label for="fPass">Пароль</label>
     </div>
-    <div class="field hidden" id="fPass2Wrap">
-      <input id="fPass2" name="password2" type="password" placeholder=" " autocomplete="new-password">
-      <label for="fPass2">Повторите пароль</label>
-    </div>
-    <div class="field hidden" id="fEmailWrap">
-      <input id="fEmail" name="email" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false">
-      <label for="fEmail">Почта — необязательно</label>
-    </div>
-    <div class="field hidden" id="fCodeWrap">
-      <input id="fCode" name="code" type="text" placeholder=" " autocomplete="off">
-      <label for="fCode">Код приглашения</label>
+    <!-- Поля регистрации раскрываются плавно, а не возникают рывком.
+         Обёртка нужна для приёма с grid-template-rows: 0fr → 1fr — он
+         анимирует высоту без магических чисел и без max-height наугад. -->
+    <div class="reveal" id="regFields">
+      <div class="reveal-in">
+        <div class="field" id="fPass2Wrap">
+          <input id="fPass2" name="password2" type="password" placeholder=" " autocomplete="new-password">
+          <label for="fPass2">Повторите пароль</label>
+        </div>
+        <div class="field" id="fEmailWrap">
+          <input id="fEmail" name="email" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false">
+          <label for="fEmail">Почта — необязательно</label>
+        </div>
+        <div class="field hidden" id="fCodeWrap">
+          <input id="fCode" name="code" type="text" placeholder=" " autocomplete="off">
+          <label for="fCode">Код приглашения</label>
+        </div>
+      </div>
     </div>
     <div class="err" id="loginErr"></div>
     <button class="btn filled full" id="loginSubmit" type="submit">Войти</button>

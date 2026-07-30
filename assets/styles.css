@@ -70,10 +70,36 @@ body{
   border-radius:var(--r-xl);
   padding:28px;width:100%;max-width:400px;
   box-shadow:var(--e2);
-  animation:pop .3s var(--ease-emph-dec);
+  /* Прибытие описано в brand.css: карточка собирается из того же движения,
+     в котором ушла карточка сервиса. Так переход между доменами читается
+     как один жест, а не как подмена страницы. */
+  animation:bh-arrive .34s cubic-bezier(.16,.84,.44,1) both;
 }
 .card.wide{max-width:520px}
-@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+
+/* Плавное раскрытие полей регистрации.
+   Высоту подставляет JS замером содержимого (см. revealToggle в app.js).
+   Приём с grid-template-rows: 0fr → 1fr выглядит изящнее и обходится без
+   скрипта, но здесь он молча не запускался: правило выигрывало в каскаде,
+   а перехода браузер не создавал вовсе — getAnimations() оставался пуст.
+   Замер надёжен и не зависит от того, что именно лежит внутри. */
+.reveal{
+  overflow:hidden;height:0;opacity:0;
+  transition:height .32s var(--ease-emph-dec), opacity .22s var(--ease-std);
+}
+.reveal.open{opacity:1}
+/* Свой контекст форматирования обязателен. Без него верхний отступ первого
+   поля «протекает» за пределы блока и в замер высоты не попадает — блок
+   выходит ровно на величину отступа короче, и последнее поле обрезается. */
+.reveal-in{display:flow-root}
+/* Раскрытие закончилось — перестаём обрезать: обводка фокуса не должна
+   срезаться краем блока. Высоту при этом отпускает JS, а не это правило:
+   она задана инлайном, и правилом из таблицы стилей её не перебить. */
+.reveal.done{overflow:visible}
+
+@media (prefers-reduced-motion: reduce){
+  .reveal{transition:none}
+}
 
 /* Локап: знак, бренд, при необходимости — название сервиса.
    Прежняя плашка со щитом (.brand) убрана — знак теперь фирменный. */

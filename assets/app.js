@@ -46,6 +46,44 @@ async function api(path, { method = "GET", body } = {}) {
 
 const show = (id, on) => $(id).classList.toggle("hidden", !on);
 
+/**
+ * Раскрывает/сворачивает блок, подставляя высоту замером содержимого.
+ * Замер делается в момент открытия — поэтому состав полей внутри нужно
+ * определить ДО вызова (например, показать или спрятать код приглашения).
+ */
+function revealToggle(box, open) {
+  box.classList.remove("done");          // снова ограничиваем высоту, чтобы было что анимировать
+
+  if (!open) {
+    // Из height:auto переход не запустится — сначала фиксируем текущую
+    // высоту числом и только следующим шагом уводим её в ноль.
+    box.style.height = box.offsetHeight + "px";
+    void box.offsetHeight;
+    box.classList.remove("open");
+    box.style.height = "0px";
+    return;
+  }
+
+  box.classList.add("open");
+  const h = box.firstElementChild.offsetHeight;
+  // Замер мог не удаться — например, блок раскрывают, пока карточка ещё
+  // скрыта. Лучше показать поля без анимации, чем оставить пользователя
+  // перед пустотой, в которой не видно, что вводить.
+  if (h > 0) box.style.height = h + "px";
+  else { box.style.height = "auto"; box.classList.add("done"); }
+}
+
+/* По окончании раскрытия высота становится auto: фиксированное число обрезало
+   бы обводку фокуса и не пережило бы изменение содержимого или ширины окна. */
+document.addEventListener("transitionend", e => {
+  const box = e.target;
+  if (e.propertyName !== "height" || !box.classList || !box.classList.contains("open")) return;
+  // Высоту снимаем ТЕМ ЖЕ способом, каким ставили: инлайновое значение
+  // перебивает любое правило из таблицы стилей, и классом его не отпустить.
+  box.style.height = "auto";
+  box.classList.add("done");     // класс отвечает только за overflow
+});
+
 /* ---------- форма входа ---------- */
 
 function renderLoginMode() {
@@ -54,9 +92,11 @@ function renderLoginMode() {
   $("loginSubmit").textContent = reg ? "Зарегистрироваться" : "Войти";
   $("loginToggle").textContent = reg ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться";
   $("fPass").autocomplete = reg ? "new-password" : "current-password";
-  show("fPass2Wrap", reg);
-  show("fEmailWrap", reg);
+  // Состав полей решаем ДО раскрытия: высота считается замером, и код
+  // приглашения должен быть уже на своём месте, иначе не попадёт в замер.
   show("fCodeWrap", reg && !!(session && session.registerCode));
+  // Блок раскрывается целиком — по одному поля «выпрыгивали» бы вразнобой.
+  revealToggle($("regFields"), reg);
   show("loginToggle", !(session && session.registerClosed));
   $("loginErr").textContent = "";
 }

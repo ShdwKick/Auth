@@ -44,6 +44,28 @@
 :root[data-theme="dark"]  .bh-backdrop{ --sky-1:var(--night-1); --sky-2:var(--night-2); }
 :root[data-theme="light"] .bh-backdrop{ --sky-1:var(--dawn-1);  --sky-2:var(--dawn-2); }
 
+/* Фон под ВСЮ страницу приложения, а не только под окно входа.
+   z-index:-1 здесь обязателен: с нулевым позиционированный слой красится
+   поверх непозиционированных блоков и накрыл бы собой весь интерфейс.
+   Хост при этом обязан отдать фон наружу — иначе слой окажется под
+   непрозрачной заливкой body и его просто не будет видно:
+
+     html{ background:var(--ваш-фон) }
+     body{ background:transparent }                                        */
+.bh-backdrop--page{ z-index:-1; }
+
+/* Приглушённый вариант — для страниц с плотным интерфейсом, где фон должен
+   только подсвечивать поля вокруг панелей, а не спорить с содержимым.
+   Приглушать приходится ОТДЕЛЬНЫМ набором кадров, а не статичной opacity:
+   свойство, которое анимируется, значением из правила не перебить — анимация
+   всегда важнее. На этом легко обжечься и потом искать, почему «не применилось». */
+.bh-backdrop--quiet .bh-glow{ animation-name:bh-breathe-quiet }
+@keyframes bh-breathe-quiet{
+  from{ transform:translateX(-50%) scale(1);    opacity:.24 }
+  to  { transform:translateX(-50%) scale(1.07); opacity:.32 }
+}
+.bh-backdrop--quiet .bh-haze{ opacity:.55 }
+
 .bh-layer{ position:absolute; inset:0; }
 
 /* Свечение очага снизу по центру — оттуда, где горит дом. */
@@ -160,13 +182,48 @@
   .bh-name, .bh-sep{ display:none }
 }
 
+/* ═══ ПЕРЕДАЧА НА СТРАНИЦУ ВХОДА ═══
+   Уход на auth-домен — это обычная навигация между разными сайтами, и резкая
+   подмена читается рывком. Кросс-доменные view transitions браузер не даёт
+   (разные origin), поэтому склеиваем вручную: здесь карточка уходит, там
+   появляется. Фон остаётся на месте и в обеих точках выглядит одинаково —
+   именно он и создаёт ощущение, что это одна страница, а не две.
+
+   Класс вешает сервис перед auth.login(); длительность обязана совпадать с
+   задержкой навигации в его коде.
+
+   Класс продублирован в селекторе намеренно: у карточки сервиса обычно уже
+   есть своя анимация появления, и её правило идёт в файле позже. При равной
+   специфичности побеждает последнее — уход бы молча не сработал. Удвоение
+   класса поднимает специфичность, не прибегая к !important. */
+.bh-leaving.bh-leaving{
+  animation:bh-leave .22s cubic-bezier(.4,0,1,1) both;
+  pointer-events:none;
+}
+@keyframes bh-leave{
+  to{ opacity:0; transform:translateY(-6px) scale(.985) }
+}
+
+/* Прибытие: карточка входа собирается из того же движения, в котором ушла
+   предыдущая. Вешается на саму карточку на auth-домене. */
+.bh-arriving{
+  animation:bh-arrive .34s cubic-bezier(.16,.84,.44,1) both;
+}
+@keyframes bh-arrive{
+  from{ opacity:0; transform:translateY(10px) scale(.985) }
+}
+
 /* ═══ ДОСТУПНОСТЬ ═══
    Замирает в осмысленном виде, а не в пустоте: искры остаются видимыми,
    свечение — в среднем положении. */
 @media (prefers-reduced-motion: reduce){
-  .bh-glow, .bh-sweep, .bh-spark, .bh-mark .bh-flame{
+  .bh-glow, .bh-sweep, .bh-spark, .bh-mark .bh-flame,
+  .bh-leaving, .bh-arriving{
     animation-duration:.01ms !important;
     animation-iteration-count:1 !important;
   }
   .bh-spark{ opacity:.45 }
+  /* Уходящая карточка не должна остаться невидимой, если анимацию отключили
+     до того, как случилась навигация. */
+  .bh-leaving{ opacity:1 }
 }
