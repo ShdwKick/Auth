@@ -1,8 +1,8 @@
-name: Build and deploy
+name: Build and publish
 
-# Пуш в master -> собираем образ, пушим в Docker Hub, дальше по SSH обновляем контейнер
-# на сервере (docker compose pull && up -d). Сертификаты/nginx этот workflow не трогает —
-# только сам образ приложения.
+# Пуш в master -> собираем образ и пушим в Docker Hub. На сервер этот workflow НЕ ходит:
+# новый образ забирает Watchtower, который там крутится (см. deploy/watchtower-compose.yml).
+
 on:
   push:
     branches: [master]
@@ -13,9 +13,9 @@ on:
       - 'test/**'
       - 'examples/**'
 
-# Не даём двум деплоям накладываться друг на друга, если запушили несколько коммитов подряд
+# Не даём двум сборкам накладываться друг на друга, если запушили несколько коммитов подряд
 concurrency:
-  group: deploy-auth-production
+  group: publish-auth
   cancel-in-progress: false
 
 jobs:
@@ -39,28 +39,3 @@ jobs:
           tags: shadowkick/auth:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    environment: MyServerEnv
-    steps:
-      - name: Pull new image and restart the container over SSH
-        env:
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts
-
-          ssh -i ~/.ssh/deploy_key -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" '
-            set -e
-            cd ~/auth
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
-          '

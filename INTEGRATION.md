@@ -81,10 +81,18 @@ redirect_uri означал бы, что любой сайт может увес
 environment:
   AUTH_ISSUER: https://auth.burninghouse.ru   # обязательно
   AUTH_CLIENT_ID: notes
+labels:
+  # чтобы Watchtower на сервере обновлял контейнер сам, когда вы запушите новый образ
+  com.centurylinklabs.watchtower.enable: "true"
 ```
 
 `AUTH_ISSUER` должен совпадать с `ISSUER` auth-сервиса **символ в символ** — он
 подписан внутрь токенов и сверяется буквально.
+
+Метка Watchtower — почему она вместо деплоя по SSH: сервер сам забирает новый образ
+из Docker Hub, поэтому проекту не нужен ни SSH-ключ в секретах, ни деплой-скрипт.
+Достаточно `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN` в GitHub Actions. Подробнее —
+`README-deploy.md`, шаг 7.
 
 ### 4. Бэкенд — проверять токен
 
@@ -259,6 +267,9 @@ CREATE INDEX idx_notes_user ON notes(user_id);
 - [ ] Свои таблицы завязаны на `user_id`, не на логин
 - [ ] Запрос без токена возвращает 401, а не пустые данные
 - [ ] Проверено, что после `docker restart` вашего контейнера вход не теряется
+- [ ] В compose есть метка `com.centurylinklabs.watchtower.enable` — иначе новый образ
+      придётся выкатывать руками
+- [ ] В секретах репозитория только `DOCKERHUB_*`; SSH-ключа там быть не должно
 
 ---
 

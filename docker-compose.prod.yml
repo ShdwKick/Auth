@@ -1,13 +1,3 @@
-# Продакшн-compose для сервера: тянет готовый образ из Docker Hub, ничего не собирает.
-# На сервере нужен только этот файл — исходники клонировать не обязательно.
-#
-#   docker compose -f docker-compose.prod.yml pull
-#   docker compose -f docker-compose.prod.yml up -d
-#
-# Данные (аккаунты, сессии, ПРИВАТНЫЕ КЛЮЧИ ПОДПИСИ) лежат в volume auth-data
-# и переживают обновление образа. Потеря volume = разлогин всех пользователей
-# во всех сервисах, поэтому он в первую очередь идёт в бэкап.
-
 name: bh-auth
 
 services:
@@ -15,6 +5,8 @@ services:
     image: shadowkick/auth:latest
     container_name: auth
     restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     environment:
       HOST: 0.0.0.0
       PORT: 8788

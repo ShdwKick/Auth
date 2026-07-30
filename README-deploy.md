@@ -47,6 +47,34 @@
 
 ---
 
+## Порядок выката (шпаргалка)
+
+Порядок здесь важнее самих команд — в нём два места, где легко уронить работающий сайт.
+
+| № | Шаг | Почему именно здесь |
+|---|---|---|
+| 1 | DNS `auth.burninghouse.ru` → сервер | без него не пройдёт проверка certbot |
+| 2 | Сертификат (`certbot --standalone`) | до nginx: конфиг ссылается на `fullchain.pem`, без файла `nginx -t` падает |
+| 3 | Образ auth опубликован или собран | |
+| 4 | Запустить auth, проверить `/api/health` и JWKS | слушает только `127.0.0.1:8788` — снаружи его пока нет |
+| 5 | **`import-finance` — перенос пользователей** | пока auth не опубликован через nginx, зарегистрироваться извне невозможно ⇒ занять чужой логин тоже. После шага 6 такое окно уже появится |
+| 6 | nginx-конфиг + `reload` | с этого момента auth доступен снаружи |
+| 7 | Обновить Finance: `git pull`, затем `up -d` | **новый образ Finance без `AUTH_ISSUER` падает с кодом 1** и уходит в restart-loop |
+| 8 | Watchtower | последним: сначала убедиться, что всё работает руками |
+
+Два места, где легко уронить работающий сайт:
+
+- **Шаг 7 — самый опасный.** Опубликованный `shadowkick/finance:latest` уже требует
+  `AUTH_ISSUER`. Если на сервере выполнить `docker compose pull && up -d` со старым
+  compose (без этой переменной), контейнер начнёт падать и `money.burninghouse.ru`
+  ляжет. Поэтому `git pull` (он принесёт новый compose с переменной) — строго перед
+  `up -d`.
+- **Шаг 5 нельзя откладывать на потом.** После шага 6 форма регистрации доступна
+  всему интернету, и посторонний может занять логин, под которым в старой базе
+  Finance лежат чужие данные. Импорт занимает одну команду — сделайте его сразу.
+
+---
+
 ## Первое развёртывание
 
 ### Шаг 1. DNS
@@ -57,13 +85,29 @@ A-запись `auth.burninghouse.ru` → IP сервера. Дождитесь,
 ### Шаг 2. Сертификат
 
 ```bash
-sudo certbot certonly --standalone -d auth.burninghouse.ru
+sudo ss -tulpn | grep ':80 '     # должно быть пусто
+sudo certbot certonly --standalone -d auth.burninghouse.ru \
+  --deploy-hook "systemctl reload nginx"
 ```
 
-Порт 80 на время выпуска должен быть свободен. Если там уже слушает nginx —
-`sudo systemctl stop nginx`, выпустить, `sudo systemctl start nginx`.
+Порт 80 на время выпуска должен быть свободен — `--standalone` сам поднимает на нём
+слушателя. Если там кто-то есть, посмотрите кто: если это nginx, его можно на минуту
+остановить (`systemctl stop nginx`, выпустить, `start`), но тогда на эту минуту лягут и
+остальные сайты сервера.
+
+`--deploy-hook` нужен, чтобы после автоматического продления nginx перечитал новый
+сертификат. Без него он продолжит отдавать старый до ближайшего ручного `reload` —
+и однажды отдаст просроченный.
+
+**Порт 80 после этого оставьте свободным.** Продление работает тем же
+`--standalone`, то есть на 80-й порт: занять его nginx-ом означает сломать продление
+у всех домов сервера, причём молча и через два месяца. По этой же причине в
+`nginx-auth-443.conf` намеренно нет блока `listen 80` с редиректом.
 
 ### Шаг 3. nginx
+
+Строго **после** выпуска сертификата: конфиг ссылается на `fullchain.pem`, и без
+существующего файла `nginx -t` упадёт, а `reload` не применится.
 
 ```bash
 sudo cp deploy/nginx-auth-443.conf /etc/nginx/sites-available/auth
@@ -73,18 +117,47 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ### Шаг 4. Запуск контейнера
 
-На сервере нужен только `docker-compose.prod.yml` — исходники клонировать не обязательно:
-
 ```bash
-mkdir -p ~/auth && cd ~/auth
-# скопировать сюда docker-compose.prod.yml под именем docker-compose.yml
-docker compose pull
-docker compose up -d
-docker compose logs -f auth
+cd ~/auth                                          # каталог с клоном репозитория
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml logs -f auth
 ```
+
+⚠️ **`-f docker-compose.prod.yml` обязателен.** В репозитории есть и обычный
+`docker-compose.yml` — он для локальной разработки и **собирает образ из исходников**,
+а не тянет опубликованный. Без `-f` вы соберёте на сервере локальную сборку, которую
+Watchtower потом не сможет обновлять.
+
+Чтобы не писать `-f` каждый раз, добавьте на сервере алиас:
+`echo 'alias dcauth="docker compose -f ~/auth/docker-compose.prod.yml"' >> ~/.bashrc`.
+Сам файл `docker-compose.yml` в клоне не подменяйте — `git pull` будет конфликтовать.
+
+Если образ ещё не опубликован в Docker Hub (`pull` отвечает
+`manifest unknown` / `repository does not exist`), см. «Первая публикация образа» ниже.
 
 Проверка: `curl -s https://auth.burninghouse.ru/api/health` → `{"ok":true}` и
 `curl -s https://auth.burninghouse.ru/.well-known/jwks.json` → ключ с `"crv":"Ed25519"`.
+
+### Первая публикация образа
+
+`docker-compose.prod.yml` тянет `shadowkick/auth:latest` из Docker Hub. Пока образ там
+не появился, `pull` ругается `manifest unknown`. Два способа:
+
+**Через CI (правильный, нужен для автообновления).** Завести в GitHub-репозитории
+секреты `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN` в окружении `MyServerEnv` и запушить
+в `master` — Actions соберёт и опубликует. Дальше это происходит само при каждом пуше.
+
+**Собрать на сервере (быстро, разово).** Годится, чтобы поднять сервис сейчас же:
+
+```bash
+cd ~/auth && docker build -t shadowkick/auth:latest .
+docker compose -f docker-compose.prod.yml up -d      # без pull
+```
+
+Но учтите: пока образа нет в реестре, **Watchtower обновлять его не сможет** — ему
+нечего сравнивать, в логе будут ошибки обращения к реестру. Так что это временная мера
+до первой публикации через CI.
 
 ### Шаг 5. Зарегистрировать сервисы
 
@@ -109,15 +182,24 @@ docker compose exec auth node server.js clients      # проверить
 который уже занят в старой базе Finance.
 
 ```bash
-# базу Finance подключаем к контейнеру auth только на чтение и только на один запуск
+docker volume ls | grep -E 'finance|auth'    # уточнить имена томов
+
 docker run --rm \
-  -v auth-data:/app/data \
-  -v moi-finansy_finance-data:/finance:ro \
+  -v bh-auth_auth-data:/app/data \
+  -v moi-finansy_finance-data:/finance \
   shadowkick/auth:latest \
   node server.js import-finance /finance/store.db
 ```
 
-(имя тома Finance посмотрите через `docker volume ls`)
+⚠️ **Том Finance монтируется БЕЗ `:ro`, и это не оплошность.** С `:ro` команда падает
+на `unable to open database file`: база Finance в режиме WAL, а для чтения такой базы
+SQLite обязан создать рядом файл `store.db-shm` — на смонтированном только для чтения
+томе он этого сделать не может. Сама команда базу Finance не изменяет: соединение
+открывается read-only на уровне SQLite, появляются только служебные `-shm`/`-wal`
+(проверено: `integrity_check` после импорта — `ok`, данные на месте).
+
+Имя тома auth зависит от имени проекта в compose (`name: bh-auth` ⇒
+`bh-auth_auth-data`) — сверьтесь с `docker volume ls`, если запускали иначе.
 
 Команда выведет таблицу «логин → user_id» и сколько аккаунтов создано. Пароли
 переносятся как есть: люди входят своими старыми. Финансовые данные при этом не
@@ -125,19 +207,68 @@ docker run --rm \
 
 Повторный запуск безопасен: уже существующие логины пропускаются.
 
-### Шаг 7. CI/CD
+### Шаг 7. Автообновление (Watchtower) и CI
 
-Как в «Финансах»: GitHub Actions на пуш в `master`. Нужны:
+Деплой построен на **pull-модели**: GitHub Actions только собирает образ и пушит его в
+Docker Hub, а забирает его сервер сам. Из CI это убирает SSH-ключ — единственный
+секрет, который нужен репозиторию, это токен Docker Hub, а он доступа к серверу не даёт.
+Каждый следующий проект BurningHouse не требует вообще ни одного инфраструктурного
+секрета и ни одной строки деплой-скрипта.
 
-1. Отдельный SSH-ключ (не тот же, что у Finance):
-   ```bash
-   ssh-keygen -t ed25519 -f auth_deploy -C "github-actions auth"
-   # публичную часть — в ~/.ssh/authorized_keys пользователя github на сервере
-   ```
-2. В GitHub Environment `MyServerEnv` этого репозитория — секреты
-   `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `SSH_KEY`, `SSH_HOST`, `SSH_USER`, `SSH_PORT`.
+**Один раз на сервер** ставится Watchtower:
 
-Дальше пуш в `master` сам собирает образ и обновляет контейнер.
+```bash
+mkdir -p ~/watchtower && cd ~/watchtower
+# скопировать сюда deploy/watchtower-compose.yml под именем docker-compose.yml
+docker compose up -d
+docker compose logs -f      # должен написать, сколько контейнеров он видит
+```
+
+Обновляются **только контейнеры с явной меткой** — режим строго opt-in, потому что на
+этом же сервере живут xray, WireGuard, zabbix и панель 3x-ui, и самовольно обновлять их
+Watchtower не должен. Метка уже стоит в `docker-compose.prod.yml` этого проекта и в
+«Финансах»:
+
+```yaml
+labels:
+  com.centurylinklabs.watchtower.enable: "true"
+```
+
+**В репозитории** нужны только два секрета (Environment `MyServerEnv`):
+`DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN` (именно Access Token с hub.docker.com, не
+пароль аккаунта). Дальше пуш в `master` собирает и публикует образ, Watchtower
+подхватывает его в пределах интервала опроса.
+
+Проверка, что установка удалась: в `docker compose logs watchtower` должна быть строка
+`Only checking containers using enable label`, а после первого прохода —
+`Session done ... Scanned=N`, где `N` равно числу помеченных контейнеров (а не всех
+запущенных на сервере).
+
+Что стоит знать про эту модель:
+
+- **Успешный прогон Actions означает «образ опубликован», а не «уже на проде».**
+  Выкат произойдёт в течение интервала опроса (по умолчанию 15 минут). Срочно —
+  `cd ~/auth && docker compose pull && docker compose up -d` руками.
+- **`DOCKER_API_VERSION: "1.41"` в compose Watchtower убирать нельзя.** Без него
+  контейнер не стартует на Docker Engine 25 и новее: встроенный клиент Watchtower
+  представляется версией API 1.25, а демон требует минимум 1.40 и отвечает
+  `client version 1.25 is too old`. Проверено на Engine 29.6.2.
+- **Интервал 15 минут выбран из-за лимитов Docker Hub на обращения к реестру.**
+  Каждая проверка образа считается обращением, у анонимных запросов лимит на IP.
+  Если довести число сервисов до десятка или поставить интервал в минуту, лимит
+  начнёт срабатывать и обновления будут молча пропускаться. Тогда либо увеличить
+  интервал, либо выполнить `docker login` на сервере и раскомментировать монтирование
+  `config.json` в `watchtower-compose.yml` — авторизованным лимит выше.
+- **Правки самого compose Watchtower не применяет.** Он подменяет образ, сохраняя
+  текущую конфигурацию контейнера. Поменяли env, порты, метки — нужен обычный
+  `docker compose up -d` на сервере.
+- **Что где смотреть:** `docker logs watchtower` — что и когда он обновил.
+  Если хочется уведомлений в телеграм/почту — у Watchtower есть
+  `WATCHTOWER_NOTIFICATIONS`, в базовой установке не настроено.
+
+Старые секреты `SSH_KEY`/`SSH_HOST`/`SSH_USER`/`SSH_PORT` при этой схеме не нужны —
+их можно удалить из репозиториев, а соответствующие строки убрать из
+`~/.ssh/authorized_keys` пользователя `github` на сервере.
 
 ---
 
@@ -240,6 +371,15 @@ docker run --rm -v auth-data:/data -v "$PWD:/backup" alpine \
 **Вход проходит, но сразу выкидывает обратно.** Скорее всего, кука не доехала: в проде
 она `Secure`, то есть по `http://` браузер её не отдаст. Убедитесь, что открываете
 `https://`, а nginx передаёт `X-Forwarded-Proto https`.
+
+**Watchtower не стартует, в логе `client version 1.25 is too old`.** Пропал или
+занижен `DOCKER_API_VERSION` в его compose — см. выше.
+
+**Watchtower пишет `Found new image`, но `Updated=0`.** Рядом в логе будет
+`Failed to retrieve container image info: No such image`. Значит, образ, на котором
+запущен контейнер, отсутствует локально, и Watchtower не рискует его подменять.
+Лечится обычным `docker compose pull && docker compose up -d` — дальше он снова
+обновляет сам.
 
 **После рестарта все разлогинились.** Значит, потерялся volume `auth-data` — вместе с
 ним ушли ключи подписи и сессии. Проверьте, что в compose не `docker compose down -v`.
