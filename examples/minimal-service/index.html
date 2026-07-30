@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Пример сервиса — BurningHouse</title>
+<style>
+  body{font:16px/1.5 system-ui,sans-serif;max-width:36rem;margin:10vh auto;padding:0 1.5rem;
+       background:#fbf8ff;color:#1c1b20}
+  @media(prefers-color-scheme:dark){body{background:#141318;color:#e5e1e9}textarea{background:#201f25;color:inherit}}
+  h1{font-size:1.5rem}
+  button{font:inherit;font-weight:600;padding:.7em 1.4em;border:0;border-radius:99px;cursor:pointer;
+         background:#5b4fe0;color:#fff}
+  button.ghost{background:transparent;color:#5b4fe0;border:1px solid #777680}
+  textarea{width:100%;min-height:8rem;font:inherit;padding:.8em;border:1px solid #777680;
+           border-radius:8px;background:#fff;color:inherit}
+  .row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem}
+  .muted{color:#46464f;font-size:.85rem}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+
+<h1>Пример сервиса</h1>
+
+<!-- Гость: одна кнопка, которая уводит на страницу входа auth-сервиса -->
+<div id="guest" class="hidden">
+  <p>Заметка хранится на сервере и привязана к вашему аккаунту BurningHouse.</p>
+  <div class="row"><button onclick="auth.login()">Войти</button></div>
+  <p class="muted" id="guestErr"></p>
+</div>
+
+<!-- Вошедший: собственно заметка -->
+<div id="app" class="hidden">
+  <p>Вы вошли как <b id="who">—</b>. <span class="muted" id="status"></span></p>
+  <textarea id="text" placeholder="Пишите — сохранится автоматически"></textarea>
+  <div class="row">
+    <button class="ghost" onclick="window.open(auth.accountUrl(),'_blank','noopener')">Управление аккаунтом</button>
+    <button class="ghost" onclick="auth.logout()">Выйти</button>
+  </div>
+</div>
+
+<script src="assets/auth-client.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let auth = null, saveTimer = null;
+
+function show(id) { for (const v of ["guest", "app"]) $(v).classList.toggle("hidden", v !== id); }
+
+async function init() {
+  // Адрес auth приходит с бэкенда — в статике он не зашит.
+  const cfg = await (await fetch("/api/config")).json();
+  auth = createAuthClient({
+    authBase: cfg.authBase,
+    clientId: cfg.clientId,
+    redirectUri: location.origin + location.pathname,
+    storagePrefix: "example",
+  });
+
+  // Обязательно ДО первого запроса к своему API: обменивает ?code=… на токены.
+  await auth.handleRedirect();
+
+  if (!auth.isAuthenticated()) return show("guest");
+
+  const res = await auth.fetch("/api/note");
+  const data = await res.json();
+  $("who").textContent = data.username || auth.getUser()?.username || "—";
+  $("text").value = data.text || "";
+  show("app");
+}
+
+$("text").addEventListener("input", () => {
+  $("status").textContent = "сохранение…";
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 600);
+});
+
+async function save() {
+  try {
+    await auth.fetch("/api/note", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: $("text").value }),
+    });
+    $("status").textContent = "сохранено";
+  } catch (e) {
+    // Единственный случай, когда пользователя надо вернуть на вход:
+    // access протух И обновить его не удалось.
+    if (e.name === "AuthRequiredError") { auth.clearTokens(); return show("guest"); }
+    $("status").textContent = "нет связи";
+  }
+}
+
+init().catch(e => {
+  console.error(e);
+  show("guest");
+  $("guestErr").textContent = "Не удалось связаться с сервером — обновите страницу.";
+});
+</script>
+</body>
+</html>
