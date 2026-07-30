@@ -37,11 +37,9 @@ services:
       WATCHTOWER_LABEL_ENABLE: "true"
 
       # Без этого Watchtower 1.7.1 НЕ СТАРТУЕТ на современном демоне: его встроенный
-      # клиент представляется версией API 1.25, а Docker Engine 25+ требует минимум
-      # 1.40 и отвечает "client version is too old". Проверено на Engine 29.6.2.
-      # 1.41 выбрана как самая низкая из поддерживаемых: работает и со старыми
-      # демонами (Docker 20.10+), и с новыми.
-      DOCKER_API_VERSION: "1.41"
+      # клиент представляется версией API 1.25, а Docker Engine отвечает
+      # "client version 1.25 is too old".
+      DOCKER_API_VERSION: "1.44"
 
       # Удалять старый образ после обновления — заменяет ручной docker image prune.
       WATCHTOWER_CLEANUP: "true"
