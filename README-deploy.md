@@ -9,7 +9,7 @@
 Живёт по тем же правилам, что и «Мои финансы»: один образ = один контейнер за nginx на
 своём поддомене, без npm-зависимостей, данные в SQLite внутри docker volume.
 
-- Домен: `auth.burninghouse.ru`
+- Домен: `<Домен>`
 - Порт внутри: `127.0.0.1:8788`
 - Образ: `shadowkick/auth:latest`
 - Каталог на сервере: `~/auth`
@@ -25,7 +25,7 @@
 ```
 1. Пользователь жмёт «Войти» в сервисе
        ↓
-2. Сервис уводит его на  auth.burninghouse.ru/authorize?client_id=…&code_challenge=…
+2. Сервис уводит его на  <Домен>/authorize?client_id=…&code_challenge=…
        ↓
 3. Есть кука сессии на auth-домене?
        да  → сразу редирект обратно (SSO: пароль не спрашиваем)
@@ -53,7 +53,7 @@
 
 | № | Шаг | Почему именно здесь |
 |---|---|---|
-| 1 | DNS `auth.burninghouse.ru` → сервер | без него не пройдёт проверка certbot |
+| 1 | DNS `<Домен>` → сервер | без него не пройдёт проверка certbot |
 | 2 | Сертификат (`certbot --standalone`) | до nginx: конфиг ссылается на `fullchain.pem`, без файла `nginx -t` падает |
 | 3 | Образ auth опубликован или собран | |
 | 4 | Запустить auth, проверить `/api/health` и JWKS | слушает только `127.0.0.1:8788` — снаружи его пока нет |
@@ -79,14 +79,14 @@
 
 ### Шаг 1. DNS
 
-A-запись `auth.burninghouse.ru` → IP сервера. Дождитесь, пока `dig auth.burninghouse.ru`
+A-запись `<Домен>` → IP сервера. Дождитесь, пока `dig <Домен>`
 (или `nslookup`) начнёт отдавать нужный адрес — без этого certbot не пройдёт проверку.
 
 ### Шаг 2. Сертификат
 
 ```bash
 sudo ss -tulpn | grep ':80 '     # должно быть пусто
-sudo certbot certonly --standalone -d auth.burninghouse.ru \
+sudo certbot certonly --standalone -d <Домен> \
   --deploy-hook "systemctl reload nginx"
 ```
 
@@ -118,7 +118,7 @@ sudo nginx -t && sudo systemctl reload nginx
 ### Шаг 4. Запуск контейнера
 
 ```bash
-cd ~/auth                                          # каталог с клоном репозитория
+cd ~/Auth                                          # каталог с клоном репозитория
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml logs -f auth
@@ -136,8 +136,8 @@ Watchtower потом не сможет обновлять.
 Если образ ещё не опубликован в Docker Hub (`pull` отвечает
 `manifest unknown` / `repository does not exist`), см. «Первая публикация образа» ниже.
 
-Проверка: `curl -s https://auth.burninghouse.ru/api/health` → `{"ok":true}` и
-`curl -s https://auth.burninghouse.ru/.well-known/jwks.json` → ключ с `"crv":"Ed25519"`.
+Проверка: `curl -s https://<Домен>/api/health` → `{"ok":true}` и
+`curl -s https://<Домен>/.well-known/jwks.json` → ключ с `"crv":"Ed25519"`.
 
 ### Первая публикация образа
 
@@ -186,7 +186,7 @@ docker volume ls | grep -E 'finance|auth'    # уточнить имена то�
 
 docker run --rm \
   -v bh-auth_auth-data:/app/data \
-  -v moi-finansy_finance-data:/finance \
+  -v bh-finansy_finance-data:/finance \
   shadowkick/auth:latest \
   node server.js import-finance /finance/store.db
 ```
