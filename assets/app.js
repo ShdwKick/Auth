@@ -123,6 +123,9 @@ async function submitLogin(ev) {
     if (password !== $("fPass2").value) { err.textContent = "Пароли не совпадают"; return; }
     const email = $("fEmail").value.trim();
     if (email) body.email = email;
+    const name = $("fName").value.trim();
+    if (name) body.displayName = name;
+    body.showDisplayName = $("fShowName").checked;
     const code = $("fCode").value.trim();
     if (code) body.code = code;
     endpoint = "/api/authorize/register";
@@ -146,10 +149,20 @@ async function submitLogin(ev) {
 /* ---------- личный кабинет ---------- */
 
 function renderUser(user) {
-  $("acAvatar").textContent = (user.username[0] || "?").toUpperCase();
-  $("acName").textContent = user.username;
+  // Показываем имя, только если сам пользователь включил показ (user.name
+  // приходит с сервера уже посчитанным — см. computedName в lib/store.js);
+  // иначе как и раньше — логин.
+  const shown = user.name || user.username;
+  $("acAvatar").textContent = (shown[0] || "?").toUpperCase();
+  $("acName").textContent = shown;
   $("acMail").textContent = user.email || "почта не указана";
   $("mailValue").value = user.email || "";
+}
+
+/** Сырые значения для формы редактирования — отдельно от того, что показывается публично. */
+function renderProfile(profile) {
+  $("nameValue").value = profile.displayName || "";
+  $("nameShow").checked = !!profile.showDisplayName;
 }
 
 function fmtWhen(ts) {
@@ -256,6 +269,23 @@ async function saveEmail(ev) {
   snack("Почта сохранена");
 }
 
+async function saveProfile(ev) {
+  ev.preventDefault();
+  const err = $("nameErr");
+  err.textContent = "";
+
+  const displayName = $("nameValue").value.trim();
+  const showDisplayName = $("nameShow").checked;
+  const { ok, data } = await api("/api/account/profile", { method: "PUT", body: { displayName, showDisplayName } });
+  if (!ok) { err.textContent = data.message || "Не удалось сохранить имя"; return; }
+
+  // Сервер уже посчитал, что теперь показывать (null, если showDisplayName
+  // выключен) — не гадаем на клиенте, просто перерисовываем шапку.
+  session.user.name = data.name;
+  renderUser(session.user);
+  snack("Имя сохранено");
+}
+
 async function revokeAll() {
   if (!confirm("Отозвать доступ у всех сервисов? Во все проекты придётся войти заново.")) return;
   await api("/api/account/sessions", { method: "DELETE" });
@@ -277,6 +307,7 @@ async function logout() {
   if (session.authenticated && !flow) {
     document.title = "Аккаунт — BurningHouse";
     renderUser(session.user);
+    renderProfile(session.profile || { displayName: "", showDisplayName: false });
     show("accountCard", true);
     loadSessions();
     return;
@@ -297,5 +328,6 @@ $("loginForm").addEventListener("submit", submitLogin);
 $("loginToggle").addEventListener("click", () => { mode = mode === "login" ? "register" : "login"; renderLoginMode(); });
 $("pwForm").addEventListener("submit", changePassword);
 $("mailForm").addEventListener("submit", saveEmail);
+$("nameForm").addEventListener("submit", saveProfile);
 $("revokeAll").addEventListener("click", revokeAll);
 $("logoutBtn").addEventListener("click", logout);

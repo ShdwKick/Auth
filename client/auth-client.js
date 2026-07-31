@@ -13,7 +13,7 @@
  *     issuer:   process.env.AUTH_ISSUER,      // https://auth.burninghouse.ru
  *     audience: process.env.AUTH_CLIENT_ID,   // finance
  *   });
- *   const user = await auth.userFromRequest(req);  // { id, username, email, sid } | null
+ *   const user = await auth.userFromRequest(req);  // { id, username, name, email, sid } | null
  */
 
 const crypto = require("crypto");
@@ -120,6 +120,10 @@ module.exports = function createAuthClient(options) {
     return {
       id: payload.sub,
       username: payload.preferred_username || null,
+      // Есть, только если сам пользователь включил показ имени в кабинете
+      // BurningHouse — иначе поле отсутствует в токене вовсе. Для "Вы вошли
+      // как …" и подобного берите `user.name || user.username`.
+      name: payload.name || null,
       email: payload.email || null,
       sid: payload.sid || null,
       clientId: payload.aud,

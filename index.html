@@ -62,6 +62,14 @@
           <input id="fEmail" name="email" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false">
           <label for="fEmail">Почта — необязательно</label>
         </div>
+        <div class="field" id="fNameWrap">
+          <input id="fName" name="name" type="text" placeholder=" " maxlength="60" autocomplete="name">
+          <label for="fName">Имя — необязательно</label>
+        </div>
+        <label class="check-row" id="fShowNameWrap">
+          <input id="fShowName" type="checkbox">
+          <span>Показывать сервисам имя вместо логина</span>
+        </label>
         <div class="field hidden" id="fCodeWrap">
           <input id="fCode" name="code" type="text" placeholder=" " autocomplete="off">
           <label for="fCode">Код приглашения</label>
@@ -99,6 +107,17 @@
     </div>
   </div>
   <p class="sub">Этот аккаунт общий для всех сервисов BurningHouse.</p>
+
+  <details id="nameBlock">
+    <summary>Имя</summary>
+    <form id="nameForm">
+      <div class="field"><input id="nameValue" type="text" placeholder=" " maxlength="60" autocomplete="name"><label for="nameValue">Имя</label></div>
+      <label class="check-row"><input id="nameShow" type="checkbox"><span>Показывать сервисам вместо логина</span></label>
+      <div class="err" id="nameErr"></div>
+      <button class="btn tonal full" type="submit">Сохранить имя</button>
+    </form>
+    <p class="sub">Пока выключено — сервисы видят только логин, как раньше.</p>
+  </details>
 
   <details id="pwBlock">
     <summary>Сменить пароль</summary>

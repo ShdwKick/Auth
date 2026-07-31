@@ -126,12 +126,19 @@ if (!user) return json(res, 401, { error: "unauthorized" });
 // user = {
 //   id:        "d082f00d-…",   // стабильный UUID — ЭТО и кладём в свои таблицы
 //   username:  "danil",         // может измениться в будущем, ключом не делать
+//   name:      "Данил" | null,  // есть, только если сам пользователь включил
+//                                // показ в кабинете BurningHouse — иначе null
 //   email:     "d@example.com" | null,
 //   sid:       "…",             // id сессии, если нужен для логов
 //   clientId:  "notes",
 //   expiresAt: 1785404536000,
 // }
 ```
+
+Показывая, кто вошёл ("Вы вошли как …", подпись в шапке и подобное), берите
+`user.name || user.username` — не один `username`. Так уважается решение
+пользователя показывать имя вместо логина, принятое им один раз в общем
+кабинете и действующее сразу во всех сервисах.
 
 Что `auth-client` проверяет сам: алгоритм подписи (только `EdDSA` — подменить на
 `none` или на HMAC не получится), саму подпись, `iss`, `aud`, `exp`/`nbf` с
@@ -333,7 +340,7 @@ node -e 'console.log(JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base6
 | `POST /oauth/token` | фронт сервиса | `grant_type=authorization_code` (+`code`, `code_verifier`, `client_id`, `redirect_uri`) либо `grant_type=refresh_token` (+`refresh_token`, `client_id`) → `{access_token, refresh_token, expires_in, user}` |
 | `POST /oauth/revoke` | фронт сервиса | `{refresh_token}` → отзыв. Всегда отвечает `ok` |
 | `GET /.well-known/jwks.json` | бэкенд сервиса | публичные ключи; кэшировать час |
-| `GET /api/userinfo` | по Bearer | `{id, username, email}` |
+| `GET /api/userinfo` | по Bearer | `{id, username, email, name}` — `name` только если включён показ |
 | `GET /logout` | браузер (переход) | гасит сессию; `post_logout_redirect_uri` — только на зарегистрированный origin |
 | `GET /.well-known/openid-configuration` | — | адреса всех эндпоинтов |
 
@@ -345,7 +352,11 @@ node -e 'console.log(JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base6
   "sub": "d082f00d-a9db-4f59-9e3c-bff97ab1ece6",
   "aud": "notes",
   "preferred_username": "danil",
+  "name": "Данил",
   "email": "d@example.com",
   "sid": "…", "iat": …, "nbf": …, "exp": …, "jti": "…"
 }
 ```
+
+`name` и `email` — необязательные claims, в токене их может не быть вовсе
+(email не указан, имя не включено к показу). Не полагайтесь на их наличие.

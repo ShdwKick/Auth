@@ -267,7 +267,8 @@ const server = http.createServer(async (req, res) => {
       if (store.getUserByName(username)) return H.json(res, 409, { error: "user_exists", message: "Такой логин уже занят" });
       if (email && store.getUserByEmail(email)) return H.json(res, 409, { error: "email_exists", message: "Эта почта уже привязана к другому аккаунту" });
 
-      const user = store.createUser(username, body.password, email);
+      const displayName = pwlib.normalizeDisplayName(body.displayName);
+      const user = store.createUser(username, body.password, email, displayName, !!body.showDisplayName);
       loginLimiter.reset(limitKey);
       return completeLogin(req, res, user, params);
     }
@@ -376,10 +377,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Кто вошёл в браузере — этим страница аккаунта решает, что показывать.
+    // profile отдаём ТОЛЬКО здесь, не в publicUser(): этот эндпоинт — всегда
+    // про самого себя (аутентификация уже проверена выше), а publicUser() уходит
+    // в том числе другим сервисам, и сырое имя им видно быть не должно, пока
+    // владелец сам не включил показ (см. computedName в lib/store.js).
     if (p === "/api/session" && method === "GET") {
       const auth = authenticate(req);
       if (!auth) return H.json(res, 200, { authenticated: false, registerClosed: cfg.REGISTER_CLOSED, registerCode: !!cfg.REGISTER_CODE });
-      return H.json(res, 200, { authenticated: true, user: store.publicUser(auth.user) });
+      return H.json(res, 200, { authenticated: true, user: store.publicUser(auth.user), profile: store.ownProfile(auth.user) });
     }
 
     if (p === "/api/account/password" && method === "PUT") {
@@ -418,6 +423,23 @@ const server = http.createServer(async (req, res) => {
 
       store.setEmail(auth.user.id, email);
       return H.json(res, 200, { ok: true, email });
+    }
+
+    // Имя — некритичная косметика (в отличие от пароля/почты никого никуда не
+    // пускает и не служит контактом), поэтому в отличие от них меняется без
+    // подтверждения текущим паролем.
+    if (p === "/api/account/profile" && method === "PUT") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const body = await H.readParams(req);
+
+      const displayName = pwlib.normalizeDisplayName(body.displayName);
+      store.setProfile(auth.user.id, displayName, !!body.showDisplayName);
+      // Отдаём готовое к показу имя сразу, чтобы фронт обновил "Вы вошли как…"
+      // без повторного похода за /api/session.
+      const name = store.publicUser(store.getUserById(auth.user.id)).name;
+      return H.json(res, 200, { ok: true, name });
     }
 
     if (p === "/api/account/sessions" && method === "GET") {

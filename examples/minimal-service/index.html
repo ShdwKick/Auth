@@ -65,7 +65,8 @@ async function init() {
 
   const res = await auth.fetch("/api/note");
   const data = await res.json();
-  $("who").textContent = data.username || auth.getUser()?.username || "—";
+  const cached = auth.getUser();
+  $("who").textContent = data.name || data.username || (cached && (cached.name || cached.username)) || "—";
   $("text").value = data.text || "";
   show("app");
 }

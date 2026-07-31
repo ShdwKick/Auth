@@ -74,7 +74,9 @@ const server = http.createServer(async (req, res) => {
     if (!user) return json(res, 401, { error: "unauthorized" });
 
     if (req.method === "GET") {
-      return json(res, 200, { text: notes.get(user.id) || "", username: user.username });
+      // user.name есть, только если сам пользователь включил показ имени в
+      // кабинете BurningHouse — иначе null, тогда на экране остаётся логин.
+      return json(res, 200, { text: notes.get(user.id) || "", username: user.username, name: user.name });
     }
     if (req.method === "PUT") {
       try {
