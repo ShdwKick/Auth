@@ -126,6 +126,8 @@ async function submitLogin(ev) {
     const name = $("fName").value.trim();
     if (name) body.displayName = name;
     body.showDisplayName = $("fShowName").checked;
+    const phone = $("fPhone").value.trim();
+    if (phone) body.phone = phone;
     const code = $("fCode").value.trim();
     if (code) body.code = code;
     endpoint = "/api/authorize/register";
@@ -163,6 +165,7 @@ function renderUser(user) {
 function renderProfile(profile) {
   $("nameValue").value = profile.displayName || "";
   $("nameShow").checked = !!profile.showDisplayName;
+  $("phoneValue").value = profile.phone || "";
 }
 
 function fmtWhen(ts) {
@@ -269,6 +272,24 @@ async function saveEmail(ev) {
   snack("Почта сохранена");
 }
 
+async function savePhone(ev) {
+  ev.preventDefault();
+  const err = $("phoneErr");
+  err.textContent = "";
+  const password = $("phonePass").value;
+  if (!password) { err.textContent = "Введите текущий пароль"; return; }
+
+  const { ok, data } = await api("/api/account/phone", { method: "PUT", body: { phone: $("phoneValue").value.trim(), password } });
+  if (!ok) { err.textContent = data.message || "Не удалось сохранить телефон"; return; }
+  $("phonePass").value = "";
+  // Показываем то, во что сервер реально привёл номер (+7XXXXXXXXXX), а не
+  // то, что человек ввёл буквами/скобками/пробелами — так видно, что сервер
+  // понял его правильно.
+  $("phoneValue").value = data.phone || "";
+  if (session.profile) session.profile.phone = data.phone || "";
+  snack("Телефон сохранён");
+}
+
 async function saveProfile(ev) {
   ev.preventDefault();
   const err = $("nameErr");
@@ -328,6 +349,7 @@ $("loginForm").addEventListener("submit", submitLogin);
 $("loginToggle").addEventListener("click", () => { mode = mode === "login" ? "register" : "login"; renderLoginMode(); });
 $("pwForm").addEventListener("submit", changePassword);
 $("mailForm").addEventListener("submit", saveEmail);
+$("phoneForm").addEventListener("submit", savePhone);
 $("nameForm").addEventListener("submit", saveProfile);
 $("revokeAll").addEventListener("click", revokeAll);
 $("logoutBtn").addEventListener("click", logout);

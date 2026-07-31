@@ -70,6 +70,10 @@
           <input id="fShowName" type="checkbox">
           <span>Показывать сервисам имя вместо логина</span>
         </label>
+        <div class="field" id="fPhoneWrap">
+          <input id="fPhone" name="tel" type="tel" placeholder=" " autocomplete="tel" inputmode="tel">
+          <label for="fPhone">Телефон — необязательно</label>
+        </div>
         <div class="field hidden" id="fCodeWrap">
           <input id="fCode" name="code" type="text" placeholder=" " autocomplete="off">
           <label for="fCode">Код приглашения</label>
@@ -140,6 +144,17 @@
       <button class="btn tonal full" type="submit">Сохранить почту</button>
     </form>
     <p class="sub">Пока используется только как контакт: писем сервис ещё не отправляет.</p>
+  </details>
+
+  <details id="phoneBlock">
+    <summary>Телефон</summary>
+    <form id="phoneForm">
+      <div class="field"><input id="phoneValue" type="tel" placeholder=" " autocomplete="tel" inputmode="tel"><label for="phoneValue">Номер телефона</label></div>
+      <div class="field"><input id="phonePass" type="password" placeholder=" " autocomplete="current-password"><label for="phonePass">Текущий пароль</label></div>
+      <div class="err" id="phoneErr"></div>
+      <button class="btn tonal full" type="submit">Сохранить телефон</button>
+    </form>
+    <p class="sub">Пока нигде не используется — задел под будущие сервисы, которым понадобится номер.</p>
   </details>
 
   <details id="sessBlock">

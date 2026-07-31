@@ -267,8 +267,13 @@ const server = http.createServer(async (req, res) => {
       if (store.getUserByName(username)) return H.json(res, 409, { error: "user_exists", message: "Такой логин уже занят" });
       if (email && store.getUserByEmail(email)) return H.json(res, 409, { error: "email_exists", message: "Эта почта уже привязана к другому аккаунту" });
 
+      const phone = pwlib.normalizePhone(body.phone);
+      const phoneErr = pwlib.validatePhone(phone);
+      if (phoneErr) return H.json(res, 400, { error: "invalid", message: phoneErr });
+      if (phone && store.getUserByPhone(phone)) return H.json(res, 409, { error: "phone_exists", message: "Этот телефон уже привязан к другому аккаунту" });
+
       const displayName = pwlib.normalizeDisplayName(body.displayName);
-      const user = store.createUser(username, body.password, email, displayName, !!body.showDisplayName);
+      const user = store.createUser(username, body.password, email, displayName, !!body.showDisplayName, phone);
       loginLimiter.reset(limitKey);
       return completeLogin(req, res, user, params);
     }
@@ -423,6 +428,28 @@ const server = http.createServer(async (req, res) => {
 
       store.setEmail(auth.user.id, email);
       return H.json(res, 200, { ok: true, email });
+    }
+
+    // Телефон — задел под будущую интеграцию с СБП, поэтому в отличие от
+    // имени меняется, как почта, с подтверждением текущим паролем: это уже
+    // не косметика, а платёжно-значимые данные.
+    if (p === "/api/account/phone" && method === "PUT") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const body = await H.readParams(req);
+
+      if (!store.checkPassword(auth.user, String(body.password || "")))
+        return H.json(res, 401, { error: "bad_credentials", message: "Неверный пароль" });
+
+      const phone = pwlib.normalizePhone(body.phone);
+      const err = pwlib.validatePhone(phone);
+      if (err) return H.json(res, 400, { error: "invalid", message: err });
+      const taken = phone && store.getUserByPhone(phone);
+      if (taken && taken.id !== auth.user.id) return H.json(res, 409, { error: "phone_exists", message: "Этот телефон уже привязан к другому аккаунту" });
+
+      store.setPhone(auth.user.id, phone);
+      return H.json(res, 200, { ok: true, phone });
     }
 
     // Имя — некритичная косметика (в отличие от пароля/почты никого никуда не
