@@ -28,9 +28,11 @@ if (!fs.existsSync(path.join(FIN_DIR, "server.js"))) {
 }
 
 // Чужой сервис на наших портах дал бы непонятные ошибки в середине прогона.
-for (const [url, port] of [[AUTH, 8788], [FIN, 8787]]) {
+// Finance версионирует API (/api/v1/...), auth — нет: это два разных сервиса
+// со своей историей, и совпадать в этом им не обязательно.
+for (const [url, port, health] of [[AUTH, 8788, "/api/health"], [FIN, 8787, "/api/v1/health"]]) {
   try {
-    await fetch(url + "/api/health", { signal: AbortSignal.timeout(700) });
+    await fetch(url + health, { signal: AbortSignal.timeout(700) });
     console.error(`Порт ${port} уже занят — остановите тот сервис и повторите.`);
     process.exit(1);
   } catch { /* никого нет, продолжаем */ }
@@ -87,22 +89,22 @@ start("finance", FIN_DIR, {
   AUTH_CLOCK_SKEW: "0", // чтобы проверить протухание токена, не ожидая допуска на часы
 });
 
-async function waitUp(url) {
+async function waitUp(healthUrl) {
   for (let i = 0; i < 50; i++) {
-    try { if ((await fetch(url + "/api/health")).ok) return true; } catch { }
+    try { if ((await fetch(healthUrl)).ok) return true; } catch { }
     await sleep(200);
   }
   return false;
 }
-ok("auth поднялся", await waitUp(AUTH));
-ok("finance поднялся", await waitUp(FIN));
+ok("auth поднялся", await waitUp(AUTH + "/api/health"));
+ok("finance поднялся", await waitUp(FIN + "/api/v1/health"));
 
 /* ---------- 4. Конфиг, который фронт получает от Finance ---------- */
-const cfg = await (await fetch(FIN + "/api/config")).json();
+const cfg = await (await fetch(FIN + "/api/v1/config")).json();
 ok("Finance отдаёт адрес auth", cfg.authBase === AUTH && cfg.clientId === "finance", JSON.stringify(cfg));
 
 /* ---------- 5. Без токена данные закрыты ---------- */
-ok("/api/state без токена → 401", (await fetch(FIN + "/api/state")).status === 401);
+ok("/api/v1/state без токена → 401", (await fetch(FIN + "/api/v1/state")).status === 401);
 
 /* ---------- 6. Вход старым паролем Finance ---------- */
 const verifier = b64u(crypto.randomBytes(32));
@@ -132,33 +134,41 @@ let tok = await r.json();
 ok("обмен кода на токены", r.status === 200 && !!tok.access_token, JSON.stringify(tok.user));
 
 /* ---------- 7. Ленивый переезд данных ---------- */
-r = await fetch(FIN + "/api/state", { headers: { Authorization: "Bearer " + tok.access_token } });
+r = await fetch(FIN + "/api/v1/state", { headers: { Authorization: "Bearer " + tok.access_token } });
 const st = await r.json();
 ok("данные старого пользователя подтянулись", r.status === 200 && st.data?.tx?.[0]?.note === "старая запись", JSON.stringify(st.data?.tx));
-ok("updatedAt сохранился при переезде", st.updatedAt === 1700000000000, String(st.updatedAt));
+// Блоб больше не хранится целиком — updatedAt теперь метка разбора на нормализованные
+// таблицы (Date.now() в момент миграции, см. ensureUserMigrated в server.js Finance),
+// а не перенесённая метка исходного блоба — та только попадает в лог сервера.
+ok("updatedAt проставлен временем переноса блоба", Math.abs(Date.now() - st.updatedAt) < 15000, String(st.updatedAt));
 
 {
   const db = new DatabaseSync(WORK + "/fin/store.db", { readOnly: true });
-  const v2 = db.prepare("SELECT user_id, username FROM states_v2").all();
+  // states_v2 — промежуточный формат для пользователей, уже мигрировавших туда
+  // ДО этой рефакторинга; при переносе прямо из states (наш случай) блоб идёт
+  // сразу в нормализованные таблицы, минуя states_v2.
+  const tx = db.prepare("SELECT note FROM transactions WHERE user_id = ?").all(tok.user.id);
+  const settings = db.prepare("SELECT user_id FROM settings WHERE user_id = ?").all(tok.user.id);
   const old = db.prepare("SELECT username, migrated_to, data IS NOT NULL AS has_data FROM states").all();
   db.close();
-  ok("строка появилась в states_v2 под user_id", v2.length === 1 && v2[0].user_id === tok.user.id, JSON.stringify(v2));
+  ok("блоб разобран в transactions под user_id", tx.length === 1 && tx[0].note === "старая запись", JSON.stringify(tx));
+  ok("отметка миграции — строка в settings", settings.length === 1, JSON.stringify(settings));
   ok("старая строка помечена перенесённой", old[0]?.migrated_to === tok.user.id, JSON.stringify(old));
   ok("старая строка НЕ удалена (резервная копия)", old[0]?.has_data === 1);
 }
 
 /* ---------- 8. Запись данных ---------- */
-r = await fetch(FIN + "/api/state", {
+r = await fetch(FIN + "/api/v1/state", {
   method: "PUT", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok.access_token },
   body: JSON.stringify({ data: { ...OLD_DATA, tx: [...OLD_DATA.tx, { id: "t2", amount: 50, note: "новая" }] } }),
 });
 ok("запись состояния", r.status === 200);
-r = await fetch(FIN + "/api/state", { headers: { Authorization: "Bearer " + tok.access_token } });
+r = await fetch(FIN + "/api/v1/state", { headers: { Authorization: "Bearer " + tok.access_token } });
 ok("чтение возвращает записанное", (await r.json()).data.tx.length === 2);
 
 /* ---------- 9. Протухание access-токена и тихое обновление ---------- */
 await sleep((ACCESS_TTL + 2) * 1000);
-r = await fetch(FIN + "/api/state", { headers: { Authorization: "Bearer " + tok.access_token } });
+r = await fetch(FIN + "/api/v1/state", { headers: { Authorization: "Bearer " + tok.access_token } });
 ok("протухший access-токен → 401", r.status === 401);
 
 r = await fetch(`${AUTH}/oauth/token`, {
@@ -167,7 +177,7 @@ r = await fetch(`${AUTH}/oauth/token`, {
 });
 tok = await r.json();
 ok("refresh выдал свежий access", r.status === 200 && !!tok.access_token);
-r = await fetch(FIN + "/api/state", { headers: { Authorization: "Bearer " + tok.access_token } });
+r = await fetch(FIN + "/api/v1/state", { headers: { Authorization: "Bearer " + tok.access_token } });
 ok("со свежим токеном данные снова доступны", r.status === 200);
 
 /* ---------- 10. Рестарт auth не разлогинивает ---------- */
@@ -184,7 +194,7 @@ r = await fetch(`${AUTH}/oauth/token`, {
 const afterRestart = await r.json();
 ok("ПОСЛЕ РЕСТАРТА auth пользователь остался залогинен", r.status === 200 && !!afterRestart.access_token, afterRestart.error || "");
 
-r = await fetch(FIN + "/api/state", { headers: { Authorization: "Bearer " + afterRestart.access_token } });
+r = await fetch(FIN + "/api/v1/state", { headers: { Authorization: "Bearer " + afterRestart.access_token } });
 ok("Finance принимает токен, выпущенный после рестарта", r.status === 200);
 
 /* SSO-кука тоже пережила рестарт */
@@ -197,7 +207,7 @@ const fake = crypto.generateKeyPairSync("ed25519");
 const hdr = b64u(JSON.stringify({ alg: "EdDSA", typ: "JWT", kid: "238dd0ddd64e72be" }));
 const pl = b64u(JSON.stringify({ iss: AUTH, sub: tok.user.id, aud: "finance", exp: Math.floor(Date.now() / 1000) + 600 }));
 const sig = b64u(crypto.sign(null, Buffer.from(hdr + "." + pl), fake.privateKey));
-r = await fetch(FIN + "/api/state", { headers: { Authorization: `Bearer ${hdr}.${pl}.${sig}` } });
+r = await fetch(FIN + "/api/v1/state", { headers: { Authorization: `Bearer ${hdr}.${pl}.${sig}` } });
 ok("токен, подписанный чужим ключом → 401", r.status === 401);
 
 /* ---------- 12. Отзыв доступа из кабинета ---------- */
