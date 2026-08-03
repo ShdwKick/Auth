@@ -74,6 +74,10 @@
           <input id="fPhone" name="tel" type="tel" placeholder=" " autocomplete="tel" inputmode="tel">
           <label for="fPhone">Телефон — необязательно</label>
         </div>
+        <label class="check-row" id="fSharePhoneWrap">
+          <input id="fSharePhone" type="checkbox">
+          <span>Разрешить сервисам получать телефон для переводов</span>
+        </label>
         <div class="field hidden" id="fCodeWrap">
           <input id="fCode" name="code" type="text" placeholder=" " autocomplete="off">
           <label for="fCode">Код приглашения</label>
@@ -150,11 +154,15 @@
     <summary>Телефон</summary>
     <form id="phoneForm">
       <div class="field"><input id="phoneValue" type="tel" placeholder=" " autocomplete="tel" inputmode="tel"><label for="phoneValue">Номер телефона</label></div>
+      <label class="check-row"><input id="phoneShare" type="checkbox"><span>Разрешить сервисам получать телефон для переводов</span></label>
       <div class="field"><input id="phonePass" type="password" placeholder=" " autocomplete="current-password"><label for="phonePass">Текущий пароль</label></div>
       <div class="err" id="phoneErr"></div>
       <button class="btn tonal full" type="submit">Сохранить телефон</button>
     </form>
-    <p class="sub">Пока нигде не используется — задел под будущие сервисы, которым понадобится номер.</p>
+    <p class="sub">Без галочки номер знает только этот кабинет. С галочкой — его
+      сможет запросить сервис, которому вы уже вошли (например, чтобы принять
+      от вас перевод); кому именно его показывать внутри себя — решает сам
+      сервис, не эта настройка.</p>
   </details>
 
   <details id="sessBlock">

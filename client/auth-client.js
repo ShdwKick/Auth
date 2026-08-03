@@ -13,7 +13,7 @@
  *     issuer:   process.env.AUTH_ISSUER,      // https://auth.burninghouse.ru
  *     audience: process.env.AUTH_CLIENT_ID,   // finance
  *   });
- *   const user = await auth.userFromRequest(req);  // { id, username, name, email, sid } | null
+ *   const user = await auth.userFromRequest(req);  // { id, username, name, email, phone, sid } | null
  */
 
 const crypto = require("crypto");
@@ -125,6 +125,12 @@ module.exports = function createAuthClient(options) {
       // как …" и подобного берите `user.name || user.username`.
       name: payload.name || null,
       email: payload.email || null,
+      // Как и name — есть, только если пользователь в кабинете отдельно
+      // разрешил делиться телефоном (независимо от показа имени). Задел
+      // под переводы по номеру: например, Trip показывает его только
+      // внутри своих собственных, уже проверенных групп — какому кругу
+      // людей номер вообще виден, решает потребляющий сервис, не auth.
+      phone: payload.phone_number || null,
       sid: payload.sid || null,
       clientId: payload.aud,
       expiresAt: payload.exp * 1000,

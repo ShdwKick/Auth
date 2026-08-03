@@ -273,7 +273,7 @@ const server = http.createServer(async (req, res) => {
       if (phone && store.getUserByPhone(phone)) return H.json(res, 409, { error: "phone_exists", message: "Этот телефон уже привязан к другому аккаунту" });
 
       const displayName = pwlib.normalizeDisplayName(body.displayName);
-      const user = store.createUser(username, body.password, email, displayName, !!body.showDisplayName, phone);
+      const user = store.createUser(username, body.password, email, displayName, !!body.showDisplayName, phone, !!body.sharePhone);
       loginLimiter.reset(limitKey);
       return completeLogin(req, res, user, params);
     }
@@ -448,8 +448,12 @@ const server = http.createServer(async (req, res) => {
       const taken = phone && store.getUserByPhone(phone);
       if (taken && taken.id !== auth.user.id) return H.json(res, 409, { error: "phone_exists", message: "Этот телефон уже привязан к другому аккаунту" });
 
-      store.setPhone(auth.user.id, phone);
-      return H.json(res, 200, { ok: true, phone });
+      store.setPhone(auth.user.id, phone, !!body.sharePhone);
+      // shared — то, что реально уйдёт сервисам (null, если делиться выключили
+      // или номер стёрли), а не сырое значение из body — фронт должен видеть
+      // именно результат применения флага, а не то, что просто отправил.
+      const shared = store.publicUser(store.getUserById(auth.user.id)).phone;
+      return H.json(res, 200, { ok: true, phone, shared });
     }
 
     // Имя — некритичная косметика (в отличие от пароля/почты никого никуда не

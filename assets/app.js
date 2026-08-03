@@ -128,6 +128,7 @@ async function submitLogin(ev) {
     body.showDisplayName = $("fShowName").checked;
     const phone = $("fPhone").value.trim();
     if (phone) body.phone = phone;
+    body.sharePhone = $("fSharePhone").checked;
     const code = $("fCode").value.trim();
     if (code) body.code = code;
     endpoint = "/api/authorize/register";
@@ -166,6 +167,7 @@ function renderProfile(profile) {
   $("nameValue").value = profile.displayName || "";
   $("nameShow").checked = !!profile.showDisplayName;
   $("phoneValue").value = profile.phone || "";
+  $("phoneShare").checked = !!profile.sharePhone;
 }
 
 function fmtWhen(ts) {
@@ -279,14 +281,18 @@ async function savePhone(ev) {
   const password = $("phonePass").value;
   if (!password) { err.textContent = "Введите текущий пароль"; return; }
 
-  const { ok, data } = await api("/api/account/phone", { method: "PUT", body: { phone: $("phoneValue").value.trim(), password } });
+  const sharePhone = $("phoneShare").checked;
+  const { ok, data } = await api("/api/account/phone", { method: "PUT", body: { phone: $("phoneValue").value.trim(), sharePhone, password } });
   if (!ok) { err.textContent = data.message || "Не удалось сохранить телефон"; return; }
   $("phonePass").value = "";
   // Показываем то, во что сервер реально привёл номер (+7XXXXXXXXXX), а не
   // то, что человек ввёл буквами/скобками/пробелами — так видно, что сервер
   // понял его правильно.
   $("phoneValue").value = data.phone || "";
-  if (session.profile) session.profile.phone = data.phone || "";
+  if (session.profile) { session.profile.phone = data.phone || ""; session.profile.sharePhone = sharePhone; }
+  // data.shared — это уже то, что реально видят сервисы (null, если делиться
+  // выключили), а не сырой ввод из формы.
+  if (session.user) session.user.phone = data.shared;
   snack("Телефон сохранён");
 }
 

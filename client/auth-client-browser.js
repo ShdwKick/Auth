@@ -52,8 +52,9 @@ function createAuthClient(options) {
   function clearTokens() {
     for (const k of [K.access, K.refresh, K.expires, K.user]) localStorage.removeItem(k);
   }
-  /** { id, username, name, email } | null. name — только если пользователь
-   *  сам включил показ в кабинете; иначе null, показывайте username. */
+  /** { id, username, name, email, phone } | null. name и phone — только
+   *  если пользователь сам включил соответствующий показ в кабинете
+   *  (независимо друг от друга); иначе null. */
   function getUser() {
     try { return JSON.parse(localStorage.getItem(K.user) || "null"); } catch { return null; }
   }
