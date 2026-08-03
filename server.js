@@ -170,7 +170,7 @@ function completeLogin(req, res, user, params) {
 
 /* ---------- маршруты ---------- */
 
-const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo|\/api\/account\/|\/\.well-known\/)/;
+const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo|\/\.well-known\/)/;
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, cfg.ISSUER);
