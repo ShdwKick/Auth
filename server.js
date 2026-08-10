@@ -31,6 +31,7 @@ const store = require("./lib/store");
 const keys = require("./lib/keys");
 const tokens = require("./lib/tokens");
 const pwlib = require("./lib/passwords");
+const mailer = require("./lib/mailer");
 
 const ROOT = __dirname;
 const APP_HTML = path.join(ROOT, "index.html");
@@ -71,6 +72,7 @@ if (store.countUsers() === 0 && process.env.AUTH_USER && process.env.AUTH_PASS) 
 /* ---------- лимиты ---------- */
 const loginLimiter = H.createLimiter({ max: cfg.LOGIN_MAX_ATTEMPTS, windowMs: cfg.LOGIN_WINDOW });
 const tokenLimiter = H.createLimiter({ max: 120, windowMs: 60 * 1000 });
+const forgotLimiter = H.createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
 
 setInterval(() => store.purgeExpired(), 60 * 60 * 1000).unref();
 
@@ -262,6 +264,11 @@ const server = http.createServer(async (req, res) => {
       const err = pwlib.validateCreds(body.username, body.password);
       if (err) return H.json(res, 400, { error: "invalid", message: err });
       const email = pwlib.normalizeEmail(body.email);
+      // Обязательна для новых аккаунтов — без неё некуда слать ссылку сброса
+      // пароля (см. /api/authorize/forgot ниже). У аккаунтов, заведённых до
+      // этого требования (или через CLI adduser), почты может не быть — им
+      // сброс по ссылке недоступен, пока не добавят её в кабинете.
+      if (!email) return H.json(res, 400, { error: "invalid", message: "Укажите почту" });
       const emailErr = pwlib.validateEmail(email);
       if (emailErr) return H.json(res, 400, { error: "invalid", message: emailErr });
       if (store.getUserByName(username)) return H.json(res, 409, { error: "user_exists", message: "Такой логин уже занят" });
@@ -276,6 +283,51 @@ const server = http.createServer(async (req, res) => {
       const user = store.createUser(username, body.password, email, displayName, !!body.showDisplayName, phone, !!body.sharePhone);
       loginLimiter.reset(limitKey);
       return completeLogin(req, res, user, params);
+    }
+
+    // Запрос ссылки сброса. Ответ ВСЕГДА одинаковый, нашёлся аккаунт или нет
+    // (и есть ли у него почта) — иначе форма превращается в способ проверить,
+    // кто зарегистрирован. Настоящая причина неудачи — только в логах сервера.
+    if (p === "/api/authorize/forgot" && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      if (forgotLimiter.hit(H.clientIp(req))) return H.json(res, 429, { error: "too_many_attempts", message: "Слишком много попыток. Попробуйте позже." });
+      const body = await H.readParams(req);
+
+      const user = store.getUserByName(pwlib.normalizeUsername(body.username));
+      if (user && !user.disabled && user.email) {
+        const token = store.createPasswordReset(user.id);
+        const link = `${cfg.ISSUER}/reset?token=${token}`;
+        mailer.send({
+          to: user.email,
+          subject: "Восстановление пароля — BurningHouse",
+          text: `Чтобы задать новый пароль, перейдите по ссылке (действует 30 минут): ${link}\n\nЕсли вы не запрашивали сброс — просто игнорируйте это письмо.`,
+          html: `<p>Чтобы задать новый пароль для аккаунта «${H.escapeHtml(user.username)}», перейдите по ссылке (действует 30 минут):</p><p><a href="${link}">${link}</a></p><p>Если вы не запрашивали сброс — просто игнорируйте это письмо.</p>`,
+        });
+      }
+      return H.json(res, 200, { ok: true });
+    }
+
+    // Сама смена пароля по токену из письма — личность подтверждает токен,
+    // текущий пароль знать не нужно (в этом и смысл сброса).
+    if (p === "/api/authorize/reset" && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const body = await H.readParams(req);
+
+      const r = store.consumePasswordReset(body.token);
+      if (r.error) return H.json(res, 400, { error: r.error, message: "Ссылка недействительна или уже использована" });
+
+      const err = pwlib.validatePassword(body.password);
+      if (err) return H.json(res, 400, { error: "invalid", message: err });
+
+      store.setPassword(r.userId, body.password);
+      // В отличие от смены пароля из кабинета (там остаётся текущее
+      // устройство — человек и так знал старый пароль), здесь неизвестно,
+      // какое устройство «своё»: гасим всё, включая браузерную SSO-куку —
+      // так же, как logout-all в CLI.
+      store.revokeAllSessions(r.userId, "password-reset");
+      for (const s of store.listSso(r.userId)) store.revokeSso(s.id);
+      store.markResetUsed(r.tokenHash);
+      return H.json(res, 200, { ok: true });
     }
 
     if (p === "/logout") {
@@ -519,7 +571,7 @@ const server = http.createServer(async (req, res) => {
 
     if (method === "GET") {
       if (H.serveStatic(res, p, ROOT)) return;
-      if (p === "/" || p === "/index.html") return serveApp(res);
+      if (p === "/" || p === "/index.html" || p === "/reset") return serveApp(res);
       return errorPage(res, 404, "Страница не найдена", "Проверьте адрес.");
     }
 

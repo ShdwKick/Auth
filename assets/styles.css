@@ -23,28 +23,42 @@
   --ease-std:cubic-bezier(0.2,0,0,1);
   --ease-emph-dec:cubic-bezier(0.05,0.7,0.1,1);
   --e2:0 2px 6px rgba(0,0,0,.07),0 8px 20px rgba(0,0,0,.08);
+
+  /* Тёмные значения — под своими именами, чтобы не повторять их дважды
+     (системная тема ниже и ручное переключение кнопкой — см. .icon-btn). */
+  --dark-primary:#c6bfff; --dark-on-primary:#2e1591;
+  --dark-primary-container:#4335a8; --dark-on-primary-container:#e4dfff;
+  --dark-secondary-container:#45435c; --dark-on-secondary-container:#e3e0f9;
+  --dark-error:#ffb4ab;
+  --dark-surface:#141318; --dark-on-surface:#e5e1e9; --dark-on-surface-variant:#c8c5d0;
+  --dark-surface-container-lowest:#0f0e13; --dark-surface-container:#201f25; --dark-surface-container-high:#2b2930;
+  --dark-outline:#918f9a; --dark-outline-variant:#46464f;
+  --dark-e2:0 2px 6px rgba(0,0,0,.3),0 8px 20px rgba(0,0,0,.35);
 }
 
-/* Тема следует за системной; data-theme на <html> может её переопределить. */
+/* Тема следует за системной; data-theme на <html> (кнопка в app.js) может её
+   переопределить — в обе стороны, а не только «форсировать светлую». */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --md-sys-color-primary:#c6bfff;
-    --md-sys-color-on-primary:#2e1591;
-    --md-sys-color-primary-container:#4335a8;
-    --md-sys-color-on-primary-container:#e4dfff;
-    --md-sys-color-secondary-container:#45435c;
-    --md-sys-color-on-secondary-container:#e3e0f9;
-    --md-sys-color-error:#ffb4ab;
-    --md-sys-color-surface:#141318;
-    --md-sys-color-on-surface:#e5e1e9;
-    --md-sys-color-on-surface-variant:#c8c5d0;
-    --md-sys-color-surface-container-lowest:#0f0e13;
-    --md-sys-color-surface-container:#201f25;
-    --md-sys-color-surface-container-high:#2b2930;
-    --md-sys-color-outline:#918f9a;
-    --md-sys-color-outline-variant:#46464f;
-    --e2:0 2px 6px rgba(0,0,0,.3),0 8px 20px rgba(0,0,0,.35);
+    --md-sys-color-primary:var(--dark-primary); --md-sys-color-on-primary:var(--dark-on-primary);
+    --md-sys-color-primary-container:var(--dark-primary-container); --md-sys-color-on-primary-container:var(--dark-on-primary-container);
+    --md-sys-color-secondary-container:var(--dark-secondary-container); --md-sys-color-on-secondary-container:var(--dark-on-secondary-container);
+    --md-sys-color-error:var(--dark-error);
+    --md-sys-color-surface:var(--dark-surface); --md-sys-color-on-surface:var(--dark-on-surface); --md-sys-color-on-surface-variant:var(--dark-on-surface-variant);
+    --md-sys-color-surface-container-lowest:var(--dark-surface-container-lowest); --md-sys-color-surface-container:var(--dark-surface-container); --md-sys-color-surface-container-high:var(--dark-surface-container-high);
+    --md-sys-color-outline:var(--dark-outline); --md-sys-color-outline-variant:var(--dark-outline-variant);
+    --e2:var(--dark-e2);
   }
+}
+:root[data-theme="dark"]{
+  --md-sys-color-primary:var(--dark-primary); --md-sys-color-on-primary:var(--dark-on-primary);
+  --md-sys-color-primary-container:var(--dark-primary-container); --md-sys-color-on-primary-container:var(--dark-on-primary-container);
+  --md-sys-color-secondary-container:var(--dark-secondary-container); --md-sys-color-on-secondary-container:var(--dark-on-secondary-container);
+  --md-sys-color-error:var(--dark-error);
+  --md-sys-color-surface:var(--dark-surface); --md-sys-color-on-surface:var(--dark-on-surface); --md-sys-color-on-surface-variant:var(--dark-on-surface-variant);
+  --md-sys-color-surface-container-lowest:var(--dark-surface-container-lowest); --md-sys-color-surface-container:var(--dark-surface-container); --md-sys-color-surface-container-high:var(--dark-surface-container-high);
+  --md-sys-color-outline:var(--dark-outline); --md-sys-color-outline-variant:var(--dark-outline-variant);
+  --e2:var(--dark-e2);
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -162,6 +176,13 @@ h2{font-size:15px;font-weight:600;margin:24px 0 4px}
 .btn.danger{color:var(--md-sys-color-error)}
 .btn.small{height:36px;font-size:13px;padding:0 14px}
 
+.link-btn{
+  display:inline-block;background:none;border:0;padding:0;margin-top:10px;
+  font:inherit;font-size:13px;color:var(--md-sys-color-primary);
+  cursor:pointer;text-decoration:none;
+}
+.link-btn:hover{text-decoration:underline}
+
 /* ---- аккаунт ---- */
 .who{display:flex;align-items:center;gap:14px;margin-bottom:6px}
 .avatar{
@@ -200,6 +221,18 @@ details[open] summary::after{transform:rotate(-135deg) translateY(-2px)}
   background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);
 }
 .empty{font-size:13px;color:var(--md-sys-color-on-surface-variant);padding:12px 0}
+
+/* ---- переключатель темы — фиксирован в углу, виден на любой карточке ---- */
+.icon-btn{
+  position:fixed;top:16px;right:16px;z-index:5;
+  width:44px;height:44px;border-radius:var(--r-full);
+  border:0;background:transparent;color:var(--md-sys-color-on-surface-variant);
+  cursor:pointer;display:grid;place-items:center;overflow:hidden;
+}
+.icon-btn::after{content:"";position:absolute;inset:0;background:currentColor;opacity:0;transition:opacity .2s}
+.icon-btn:hover::after{opacity:.08}
+.icon-btn:active::after{opacity:.12}
+.icon{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
 
 .snack{
   position:fixed;left:50%;bottom:24px;transform:translate(-50%,80px);

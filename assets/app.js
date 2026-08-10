@@ -2,8 +2,9 @@
 /**
  * Страницы auth-домена: форма входа/регистрации и личный кабинет.
  *
- * Работает по куке сессии (её ставит сервер), поэтому никаких токенов здесь
- * не хранится и в localStorage ничего не кладётся.
+ * Работает по куке сессии (её ставит сервер), поэтому токенов здесь не
+ * хранится — в localStorage кладём только выбор темы (см. ниже), это не
+ * секрет и не привязано к аккаунту.
  */
 
 const $ = id => document.getElementById(id);
@@ -21,6 +22,29 @@ const flow = params.get("client_id") ? {
 
 let mode = "login";        // login | register
 let session = null;        // { authenticated, user, registerClosed, registerCode }
+
+/* ---------- тема ---------- */
+
+const THEME_KEY = "bh-theme";
+const moonIcon = `<svg class="icon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
+const sunIcon = `<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>`;
+
+/** Явный выбор из localStorage — иначе системная настройка (её и так уже
+ *  подхватывает CSS сам, но кнопке нужно знать, что показывать и что толкать
+ *  дальше при клике). */
+function currentTheme() {
+  return localStorage.getItem(THEME_KEY) || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+}
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  $("themeBtn").innerHTML = theme === "dark" ? sunIcon : moonIcon;
+}
+applyTheme(currentTheme());
+$("themeBtn").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+});
 
 /* ---------- мелочи ---------- */
 
@@ -88,17 +112,26 @@ document.addEventListener("transitionend", e => {
 
 function renderLoginMode() {
   const reg = mode === "register";
-  $("loginTitle").textContent = reg ? "Регистрация" : "Вход";
-  $("loginSubmit").textContent = reg ? "Зарегистрироваться" : "Войти";
-  $("loginToggle").textContent = reg ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться";
+  const forgot = mode === "forgot";
+  $("loginTitle").textContent = forgot ? "Восстановление пароля" : reg ? "Регистрация" : "Вход";
+  $("loginSubmit").textContent = forgot ? "Отправить ссылку" : reg ? "Зарегистрироваться" : "Войти";
+  // loginToggle двойного назначения: в login/register переключает между ними,
+  // в forgot превращается в «назад» — обработчик клика ниже этого не знает,
+  // ему достаточно, что из forgot он всегда ведёт в login.
+  $("loginToggle").textContent = forgot ? "Назад ко входу" : reg ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться";
   $("fPass").autocomplete = reg ? "new-password" : "current-password";
+  show("fPassWrap", !forgot);
+  show("forgotToggle", mode === "login");
   // Состав полей решаем ДО раскрытия: высота считается замером, и код
   // приглашения должен быть уже на своём месте, иначе не попадёт в замер.
   show("fCodeWrap", reg && !!(session && session.registerCode));
   // Блок раскрывается целиком — по одному поля «выпрыгивали» бы вразнобой.
   revealToggle($("regFields"), reg);
-  show("loginToggle", !(session && session.registerClosed));
+  // registerClosed прячет вход В регистрацию, но не должен запирать «назад»
+  // из forgot — до восстановления пароля это ограничение не имеет отношения.
+  show("loginToggle", forgot || !(session && session.registerClosed));
   $("loginErr").textContent = "";
+  $("loginOk").textContent = "";
 }
 
 async function describeFlow() {
@@ -110,7 +143,27 @@ async function describeFlow() {
 async function submitLogin(ev) {
   ev.preventDefault();
   const err = $("loginErr");
-  err.textContent = "";
+  const okEl = $("loginOk");
+  err.textContent = ""; okEl.textContent = "";
+
+  if (mode === "forgot") {
+    const username = $("fUser").value.trim();
+    if (!username) { err.textContent = "Введите логин"; return; }
+    const btn = $("loginSubmit");
+    btn.disabled = true;
+    try {
+      // Сервер всегда отвечает ok:true (кроме превышения лимита попыток) —
+      // намеренно не показывает, нашёлся ли аккаунт и есть ли у него почта.
+      const { ok } = await api("/api/authorize/forgot", { method: "POST", body: { username } });
+      if (ok) okEl.textContent = "Если у аккаунта указана почта — письмо со ссылкой отправлено";
+      else err.textContent = "Слишком много попыток. Попробуйте позже.";
+    } catch {
+      err.textContent = "Не удалось подключиться к серверу";
+    } finally {
+      btn.disabled = false;
+    }
+    return;
+  }
 
   const username = $("fUser").value.trim();
   const password = $("fPass").value;
@@ -122,7 +175,8 @@ async function submitLogin(ev) {
   if (mode === "register") {
     if (password !== $("fPass2").value) { err.textContent = "Пароли не совпадают"; return; }
     const email = $("fEmail").value.trim();
-    if (email) body.email = email;
+    if (!email) { err.textContent = "Укажите почту — она нужна для восстановления пароля"; return; }
+    body.email = email;
     const name = $("fName").value.trim();
     if (name) body.displayName = name;
     body.showDisplayName = $("fShowName").checked;
@@ -313,6 +367,32 @@ async function saveProfile(ev) {
   snack("Имя сохранено");
 }
 
+/* ---------- сброс пароля по ссылке (/reset?token=...) ---------- */
+
+async function submitReset(ev) {
+  ev.preventDefault();
+  const err = $("resetErr");
+  err.textContent = "";
+
+  const password = $("resetPass").value;
+  if (password !== $("resetPass2").value) { err.textContent = "Пароли не совпадают"; return; }
+
+  const btn = ev.target.querySelector("button[type=submit]");
+  btn.disabled = true;
+  try {
+    const { ok, data } = await api("/api/authorize/reset", { method: "POST", body: { token: params.get("token") || "", password } });
+    if (!ok) { err.textContent = data.message || "Не удалось сохранить пароль"; return; }
+    // Сброс отзывает все сессии (см. server.js) — вход по старой куке всё
+    // равно не сработает, ведём на форму входа с новым паролем.
+    snack("Пароль сохранён — войдите с новым");
+    location.replace("/");
+  } catch {
+    err.textContent = "Не удалось подключиться к серверу";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function revokeAll() {
   if (!confirm("Отозвать доступ у всех сервисов? Во все проекты придётся войти заново.")) return;
   await api("/api/account/sessions", { method: "DELETE" });
@@ -328,6 +408,15 @@ async function logout() {
 /* ---------- старт ---------- */
 
 (async function init() {
+  // Страница по ссылке из письма — самостоятельная, сессия её не касается
+  // (токен сам подтверждает личность). Без токена там делать нечего.
+  if (location.pathname === "/reset") {
+    if (!params.get("token")) { location.replace("/"); return; }
+    document.title = "Новый пароль — BurningHouse";
+    show("resetCard", true);
+    return;
+  }
+
   const res = await api("/api/session");
   session = res.data || {};
 
@@ -353,6 +442,8 @@ async function logout() {
 
 $("loginForm").addEventListener("submit", submitLogin);
 $("loginToggle").addEventListener("click", () => { mode = mode === "login" ? "register" : "login"; renderLoginMode(); });
+$("forgotToggle").addEventListener("click", () => { mode = "forgot"; renderLoginMode(); });
+$("resetForm").addEventListener("submit", submitReset);
 $("pwForm").addEventListener("submit", changePassword);
 $("mailForm").addEventListener("submit", saveEmail);
 $("phoneForm").addEventListener("submit", savePhone);
