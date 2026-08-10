@@ -565,6 +565,24 @@ const server = http.createServer(async (req, res) => {
       return H.json(res, 200, { ok: true });
     }
 
+    // Удаление аккаунта — безвозвратно. Пароль повторно не спрашиваем (сессия
+    // уже аутентифицирована), подтверждение — набрать свой логин вручную,
+    // как GitHub просит набрать имя репозитория перед удалением: не секрет,
+    // а страховка от клика мимо на уставшую голову.
+    if (p === "/api/account" && method === "DELETE") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const body = await H.readParams(req);
+
+      if (pwlib.normalizeUsername(body.username) !== auth.user.username)
+        return H.json(res, 400, { error: "invalid", message: "Логин введён неверно" });
+
+      store.deleteUser(auth.user.id);
+      H.setCookie(res, cfg.COOKIE_NAME, "", { clear: true });
+      return H.json(res, 200, { ok: true });
+    }
+
     /* --- статика и страница --- */
 
     if (method === "GET") {

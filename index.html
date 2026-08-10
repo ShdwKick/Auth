@@ -208,6 +208,19 @@
     <button class="btn danger full" id="revokeAll" type="button">Отозвать все доступы сервисов</button>
   </details>
 
+  <details id="deleteBlock">
+    <summary>Удалить аккаунт</summary>
+    <p class="sub">Аккаунт и все данные (сессии, история входов) удаляются без возможности восстановления, доступ ко всем сервисам BurningHouse пропадёт сразу. Чтобы подтвердить, наберите логин <strong id="deleteUserHint"></strong> в поле ниже.</p>
+    <form id="deleteForm">
+      <div class="field">
+        <input id="deleteUser" type="text" placeholder=" " autocomplete="off" autocapitalize="none" spellcheck="false">
+        <label for="deleteUser">Логин для подтверждения</label>
+      </div>
+      <div class="err" id="deleteErr"></div>
+      <button class="btn danger full" type="submit">Удалить аккаунт навсегда</button>
+    </form>
+  </details>
+
   <button class="btn outlined full" id="logoutBtn" type="button">Выйти</button>
 </div>
 

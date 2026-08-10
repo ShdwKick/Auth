@@ -217,6 +217,8 @@ function renderUser(user) {
   $("acName").textContent = shown;
   $("acMail").textContent = user.email || "почта не указана";
   $("mailValue").value = user.email || "";
+  // Логин, а не отображаемое имя — именно его сервер сверяет при удалении.
+  $("deleteUserHint").textContent = user.username;
 }
 
 /** Сырые значения для формы редактирования — отдельно от того, что показывается публично. */
@@ -408,6 +410,22 @@ async function logout() {
   location.replace(data.redirect || "/");
 }
 
+async function deleteAccount(ev) {
+  ev.preventDefault();
+  const err = $("deleteErr");
+  err.textContent = "";
+
+  const typed = $("deleteUser").value.trim();
+  // Сверяем и на клиенте — не ради защиты (сервер проверяет всё равно), а
+  // чтобы не гонять запрос впустую при банальной опечатке.
+  if (typed !== session.user.username) { err.textContent = "Логин введён неверно"; return; }
+  if (!confirm("Аккаунт будет удалён без возможности восстановления. Продолжить?")) return;
+
+  const { ok, data } = await api("/api/account", { method: "DELETE", body: { username: typed } });
+  if (!ok) { err.textContent = data.message || "Не удалось удалить аккаунт"; return; }
+  location.replace("/");
+}
+
 /* ---------- старт ---------- */
 
 (async function init() {
@@ -452,4 +470,5 @@ $("mailForm").addEventListener("submit", saveEmail);
 $("phoneForm").addEventListener("submit", savePhone);
 $("nameForm").addEventListener("submit", saveProfile);
 $("revokeAll").addEventListener("click", revokeAll);
+$("deleteForm").addEventListener("submit", deleteAccount);
 $("logoutBtn").addEventListener("click", logout);
