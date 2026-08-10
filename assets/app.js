@@ -119,6 +119,9 @@ function renderLoginMode() {
   // в forgot превращается в «назад» — обработчик клика ниже этого не знает,
   // ему достаточно, что из forgot он всегда ведёт в login.
   $("loginToggle").textContent = forgot ? "Назад ко входу" : reg ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться";
+  // При регистрации это будущий логин (только он, почта — отдельное поле).
+  // При входе и восстановлении сервер принимает и то, и другое (см. server.js).
+  $("fUserLabel").textContent = reg ? "Логин" : "Логин или почта";
   $("fPass").autocomplete = reg ? "new-password" : "current-password";
   show("fPassWrap", !forgot);
   show("forgotToggle", mode === "login");

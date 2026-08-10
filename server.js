@@ -32,6 +32,7 @@ const keys = require("./lib/keys");
 const tokens = require("./lib/tokens");
 const pwlib = require("./lib/passwords");
 const mailer = require("./lib/mailer");
+const mailTpl = require("./lib/emailTemplates");
 
 const ROOT = __dirname;
 const APP_HTML = path.join(ROOT, "index.html");
@@ -251,7 +252,8 @@ const server = http.createServer(async (req, res) => {
       if (loginLimiter.hit(limitKey)) return H.json(res, 429, { error: "too_many_attempts", message: "Слишком много попыток. Попробуйте через 15 минут." });
 
       if (p === "/api/authorize/login") {
-        const user = store.checkPassword(store.getUserByName(username), String(body.password || ""));
+        // Логин ИЛИ почта — так же принимает и «Забыли пароль?» ниже.
+        const user = store.checkPassword(store.getUserByIdentifier(body.username), String(body.password || ""));
         if (!user) return H.json(res, 401, { error: "bad_credentials", message: "Неверный логин или пароль" });
         loginLimiter.reset(limitKey);
         return completeLogin(req, res, user, params);
@@ -293,16 +295,12 @@ const server = http.createServer(async (req, res) => {
       if (forgotLimiter.hit(H.clientIp(req))) return H.json(res, 429, { error: "too_many_attempts", message: "Слишком много попыток. Попробуйте позже." });
       const body = await H.readParams(req);
 
-      const user = store.getUserByName(pwlib.normalizeUsername(body.username));
+      const user = store.getUserByIdentifier(body.username);
       if (user && !user.disabled && user.email) {
         const token = store.createPasswordReset(user.id);
         const link = `${cfg.ISSUER}/reset?token=${token}`;
-        mailer.send({
-          to: user.email,
-          subject: "Восстановление пароля — BurningHouse",
-          text: `Чтобы задать новый пароль, перейдите по ссылке (действует 30 минут): ${link}\n\nЕсли вы не запрашивали сброс — просто игнорируйте это письмо.`,
-          html: `<p>Чтобы задать новый пароль для аккаунта «${H.escapeHtml(user.username)}», перейдите по ссылке (действует 30 минут):</p><p><a href="${link}">${link}</a></p><p>Если вы не запрашивали сброс — просто игнорируйте это письмо.</p>`,
-        });
+        const mail = mailTpl.passwordReset({ link });
+        mailer.send({ to: user.email, subject: mail.subject, html: mail.html, text: mail.text });
       }
       return H.json(res, 200, { ok: true });
     }
