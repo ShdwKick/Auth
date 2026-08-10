@@ -30,6 +30,12 @@ services:
       # Закрыть саморегистрацию:
       # REGISTER_CODE: замените-на-свой-секрет   # регистрация по коду приглашения
       # REGISTER_CLOSED: "1"                     # совсем закрыть, аккаунты только через CLI
+
+      # Почта для сброса пароля (см. lib/mailer.js) — Resend, HTTP API. Без ключа
+      # письма не уходят, только пишутся в лог контейнера (docker compose logs auth) —
+      # так можно проверить саму ссылку, не настраивая почту заранее.
+      # RESEND_API_KEY: re_ваш_ключ_с_resend.com
+      # MAIL_FROM: "BurningHouse <noreply@burninghouse.ru>"   # адрес обязан быть на подтверждённом в Resend домене
     ports:
       # Только на localhost — наружу отдаёт nginx на 443 (см. README-deploy.md).
       - "127.0.0.1:8788:8788"
