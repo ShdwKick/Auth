@@ -592,6 +592,7 @@ const server = http.createServer(async (req, res) => {
 
     if (p === "/internal/stats" && method === "GET") {
       if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const now = Date.now();
       return H.json(res, 200, {
         ok: true,
         users: store.countUsers(),
@@ -599,6 +600,8 @@ const server = http.createServer(async (req, res) => {
         clients: store.listClients().length,
         activeSessions: store.countActiveSessions(),
         activeBrowsers: store.countActiveSso(),
+        newUsers24h: store.countUsersSince(now - 24 * 60 * 60 * 1000),
+        newUsers7d: store.countUsersSince(now - 7 * 24 * 60 * 60 * 1000),
       });
     }
 
@@ -645,6 +648,20 @@ const server = http.createServer(async (req, res) => {
       store.revokeAllSessions(u.id, "admin");
       for (const s of store.listSso(u.id)) store.revokeSso(s.id);
       adminLog.info("Принудительный выход из всех устройств", { username: u.username });
+      return H.json(res, 200, { ok: true });
+    }
+
+    // Удаление аккаунта из Admin — безвозвратно, каскад по FK (см. lib/db.js)
+    // сам уносит сессии/коды/сбросы пароля. Финансовые/бытовые данные в других
+    // сервисах не трогает: они завязаны на user_id, а не на существование
+    // записи в Auth, и это уборка отдельного порядка, не эта ручка.
+    const userDeleteMatch = p.match(/^\/internal\/users\/([\w-]+)$/);
+    if (userDeleteMatch && method === "DELETE") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const u = store.getUserById(userDeleteMatch[1]);
+      if (!u) return H.json(res, 404, { error: "not_found" });
+      store.deleteUser(u.id);
+      adminLog.warn("Аккаунт удалён", { username: u.username, id: u.id });
       return H.json(res, 200, { ok: true });
     }
 
