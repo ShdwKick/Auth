@@ -97,6 +97,37 @@
   <button class="btn full" id="loginToggle" type="button" style="margin-top:8px">Нет аккаунта? Зарегистрироваться</button>
 </div>
 
+<!-- Мягкое окошко «добавьте почту» — показывается вместо молчаливого SSO-редиректа
+     в сервис, если у аккаунта ещё нет почты (см. /authorize в server.js).
+     Пропустить можно — email_prompt_dismissed не даёт спросить снова в
+     рамках этой же SSO-сессии. -->
+<div class="card hidden" id="emailNagCard">
+  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
+    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
+      <defs>
+        <linearGradient id="bhFlameNag" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+        </linearGradient>
+      </defs>
+      <path class="bh-flame" fill="url(#bhFlameNag)" fill-rule="evenodd"
+            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+    </svg>
+    <span class="bh-name">BurningHouse</span>
+  </a>
+  <h1>Укажите почту</h1>
+  <p class="sub">Без неё нельзя будет восстановить пароль, если забудете его. Можно добавить сейчас или пропустить и сделать это позже — из кабинета.</p>
+  <form id="emailNagForm">
+    <div class="field">
+      <input id="emailNagValue" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false">
+      <label for="emailNagValue">Почта</label>
+    </div>
+    <div class="err" id="emailNagErr"></div>
+    <button class="btn filled full" type="submit">Добавить и продолжить</button>
+  </form>
+  <button class="btn full" id="emailNagSkip" type="button" style="margin-top:8px">Пропустить</button>
+</div>
+
 <!-- Открывается по ссылке из письма (?token=...) — см. /reset и
      /api/authorize/reset в server.js. Токен подтверждает личность,
      текущий пароль вводить не нужно. -->
@@ -128,6 +159,28 @@
     <div class="err" id="resetErr"></div>
     <button class="btn filled full" type="submit">Сохранить пароль</button>
   </form>
+</div>
+
+<!-- Открывается по ссылке из письма подтверждения (?token=...) — см.
+     /verify-email и /api/account/email/confirm в server.js. Подтверждает
+     сама, без участия человека — карточка только показывает результат. -->
+<div class="card hidden" id="verifyCard">
+  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
+    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
+      <defs>
+        <linearGradient id="bhFlameVerify" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+        </linearGradient>
+      </defs>
+      <path class="bh-flame" fill="url(#bhFlameVerify)" fill-rule="evenodd"
+            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+    </svg>
+    <span class="bh-name">BurningHouse</span>
+  </a>
+  <h1 id="verifyTitle">Подтверждаем почту…</h1>
+  <p class="sub" id="verifyMsg"></p>
+  <a class="btn filled full hidden" id="verifyContinue" href="https://burninghouse.ru">Готово</a>
 </div>
 
 <!-- Аккаунт: то, что видит вошедший пользователь на самом auth-домене. -->
@@ -183,11 +236,13 @@
     <summary>Почта</summary>
     <form id="mailForm">
       <div class="field"><input id="mailValue" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false"><label for="mailValue">Адрес почты</label></div>
-      <div class="field"><input id="mailPass" type="password" placeholder=" " autocomplete="current-password"><label for="mailPass">Текущий пароль</label></div>
+      <div class="field" id="mailPassWrap"><input id="mailPass" type="password" placeholder=" " autocomplete="current-password"><label for="mailPass">Текущий пароль</label></div>
       <div class="err" id="mailErr"></div>
+      <div class="ok" id="mailOk"></div>
       <button class="btn tonal full" type="submit">Сохранить почту</button>
     </form>
-    <p class="sub">Пока используется только как контакт: писем сервис ещё не отправляет.</p>
+    <p class="sub" id="mailStatus"></p>
+    <button class="link-btn hidden" id="mailResend" type="button">Отправить письмо с подтверждением ещё раз</button>
   </details>
 
   <details id="phoneBlock">

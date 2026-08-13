@@ -175,6 +175,15 @@ function completeLogin(req, res, user, params) {
   return H.json(res, 200, { ok: true, redirect: buildRedirect(params.redirectUri, code, params.state), user: store.publicUser(user) });
 }
 
+/** Общая точка отправки письма подтверждения — регистрация, смена/добавление
+ *  почты в кабинете и повторная отправка дёргают одно и то же. */
+function sendVerificationEmail(userId, email) {
+  const token = store.createEmailVerification(userId, email);
+  const link = `${cfg.ISSUER}/verify-email?token=${token}`;
+  const mail = mailTpl.emailVerify({ link });
+  mailer.send({ to: email, subject: mail.subject, html: mail.html, text: mail.text });
+}
+
 /* ---------- маршруты ---------- */
 
 const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo|\/\.well-known\/)/;
@@ -224,7 +233,11 @@ const server = http.createServer(async (req, res) => {
 
       const sso = ssoFromRequest(req);
       const user = sso ? store.getUserById(sso.user_id) : null;
-      if (user && !user.disabled && url.searchParams.get("prompt") !== "login") {
+      // Без почты — сначала мягкое окошко «добавьте и подтвердите», а не молчаливый
+      // редирект: без него человек так и не узнает, что почты у него нет, пока
+      // не понадобится восстановить пароль. Пропустить можно — email_prompt_dismissed
+      // не даёт спросить повторно в течение той же SSO-сессии.
+      if (user && !user.disabled && (user.email || sso.email_prompt_dismissed) && url.searchParams.get("prompt") !== "login") {
         // Уже вошёл на auth-домене — это и есть SSO: пароль второй раз не спрашиваем.
         const code = store.createCode({
           userId: user.id,
@@ -287,6 +300,7 @@ const server = http.createServer(async (req, res) => {
 
       const displayName = pwlib.normalizeDisplayName(body.displayName);
       const user = store.createUser(username, body.password, email, displayName, !!body.showDisplayName, phone, !!body.sharePhone);
+      sendVerificationEmail(user.id, email);
       loginLimiter.reset(limitKey);
       return completeLogin(req, res, user, params);
     }
@@ -300,7 +314,9 @@ const server = http.createServer(async (req, res) => {
       const body = await H.readParams(req);
 
       const user = store.getUserByIdentifier(body.username);
-      if (user && !user.disabled && user.email) {
+      // email_verified — иначе кто угодно мог бы вписать чужой адрес в
+      // непроверенное поле и получать чужие ссылки восстановления.
+      if (user && !user.disabled && user.email && user.email_verified) {
         const token = store.createPasswordReset(user.id);
         const link = `${cfg.ISSUER}/reset?token=${token}`;
         const mail = mailTpl.passwordReset({ link });
@@ -471,7 +487,11 @@ const server = http.createServer(async (req, res) => {
       if (!auth) return H.json(res, 401, { error: "unauthorized" });
       const body = await H.readParams(req);
 
-      if (!store.checkPassword(auth.user, String(body.password || "")))
+      // Пароль спрашиваем только при СМЕНЕ уже привязанной почты — если её
+      // ещё нет, добавить в первый раз не опаснее, чем указать при регистрации
+      // (там пароль тоже не переспрашивают). Именно этим пользуется мягкое
+      // окошко «добавьте почту» при входе в сервис — см. /authorize выше.
+      if (auth.user.email && !store.checkPassword(auth.user, String(body.password || "")))
         return H.json(res, 401, { error: "bad_credentials", message: "Неверный пароль" });
 
       const email = pwlib.normalizeEmail(body.email);
@@ -481,7 +501,48 @@ const server = http.createServer(async (req, res) => {
       if (taken && taken.id !== auth.user.id) return H.json(res, 409, { error: "email_exists", message: "Эта почта уже привязана к другому аккаунту" });
 
       store.setEmail(auth.user.id, email);
+      if (email) sendVerificationEmail(auth.user.id, email);
       return H.json(res, 200, { ok: true, email });
+    }
+
+    // Повторная отправка письма — на случай, если первое затерялось (спам,
+    // опечатка в момент отправки уже исключена: письмо шло на ту же почту).
+    if (p === "/api/account/email/resend" && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      if (!auth.user.email) return H.json(res, 400, { error: "no_email", message: "Сначала укажите почту" });
+      if (auth.user.email_verified) return H.json(res, 200, { ok: true }); // уже подтверждена — присылать нечего
+      sendVerificationEmail(auth.user.id, auth.user.email);
+      return H.json(res, 200, { ok: true });
+    }
+
+    // Подтверждение по ссылке — токен сам удостоверяет личность, авторизация
+    // на сайте не нужна (письмо могли открыть на другом устройстве).
+    if (p === "/api/account/email/confirm" && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const body = await H.readParams(req);
+      const r = store.consumeEmailVerification(body.token);
+      if (r.error) return H.json(res, 400, { error: r.error, message: "Ссылка недействительна или уже использована" });
+
+      const user = store.getUserById(r.userId);
+      // Почта на аккаунте могла смениться уже ПОСЛЕ отправки этого письма —
+      // тогда токен относится к адресу, которого на аккаунте больше нет.
+      if (!user || user.email !== r.email) return H.json(res, 400, { error: "email_changed", message: "Почта на аккаунте с тех пор изменилась — запросите ссылку заново" });
+
+      store.markEmailVerified(user.id);
+      store.markVerifyUsed(r.tokenHash);
+      return H.json(res, 200, { ok: true });
+    }
+
+    // «Пропустить» на окошке добавления почты — не показывать его снова в
+    // рамках этой же SSO-сессии (см. /authorize выше).
+    if (p === "/api/account/email/dismiss" && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth || auth.via !== "cookie") return H.json(res, 401, { error: "unauthorized" });
+      store.dismissEmailPrompt(auth.ssoId);
+      return H.json(res, 200, { ok: true });
     }
 
     // Телефон — задел под будущую интеграцию с СБП, поэтому в отличие от
@@ -678,7 +739,7 @@ const server = http.createServer(async (req, res) => {
 
     if (method === "GET") {
       if (H.serveStatic(res, p, ROOT)) return;
-      if (p === "/" || p === "/index.html" || p === "/reset") return serveApp(res);
+      if (p === "/" || p === "/index.html" || p === "/reset" || p === "/verify-email") return serveApp(res);
       return errorPage(res, 404, "Страница не найдена", "Проверьте адрес.");
     }
 

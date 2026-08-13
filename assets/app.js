@@ -221,6 +221,15 @@ function renderUser(user) {
   $("deleteUserHint").textContent = user.username;
 }
 
+/** Пароль в mailForm спрашиваем только при СМЕНЕ уже привязанной почты — то
+ *  же самое, что решает сервер в PUT /api/account/email (см. server.js). */
+function renderMailStatus(email, verified) {
+  show("mailPassWrap", !!email);
+  if (!email) { $("mailStatus").textContent = ""; show("mailResend", false); return; }
+  $("mailStatus").textContent = verified ? "Подтверждена." : "Пока не подтверждена — проверьте почту (и папку «Спам»).";
+  show("mailResend", !verified);
+}
+
 /** Сырые значения для формы редактирования — отдельно от того, что показывается публично. */
 function renderProfile(profile) {
   $("nameValue").value = profile.displayName || "";
@@ -321,16 +330,33 @@ async function changePassword(ev) {
 async function saveEmail(ev) {
   ev.preventDefault();
   const err = $("mailErr");
-  err.textContent = "";
+  const okEl = $("mailOk");
+  err.textContent = ""; okEl.textContent = "";
+  const email = $("mailValue").value.trim();
   const password = $("mailPass").value;
-  if (!password) { err.textContent = "Введите текущий пароль"; return; }
+  // Пароль обязателен только при смене УЖЕ привязанной почты — сервер решает
+  // то же самое (см. server.js), здесь просто не гоняем запрос впустую.
+  if (session.user.email && !password) { err.textContent = "Введите текущий пароль"; return; }
 
-  const { ok, data } = await api("/api/account/email", { method: "PUT", body: { email: $("mailValue").value.trim(), password } });
+  const { ok, data } = await api("/api/account/email", { method: "PUT", body: { email, password } });
   if (!ok) { err.textContent = data.message || "Не удалось сохранить почту"; return; }
   $("mailPass").value = "";
   session.user.email = data.email;
+  if (session.profile) session.profile.emailVerified = false; // новая почта — всегда неподтверждена
   renderUser(session.user);
-  snack("Почта сохранена");
+  renderMailStatus(session.user.email, false);
+  if (data.email) okEl.textContent = "Почта сохранена — письмо для подтверждения отправлено";
+}
+
+async function resendVerification() {
+  const btn = $("mailResend");
+  btn.disabled = true;
+  try {
+    const { ok } = await api("/api/account/email/resend", { method: "POST" });
+    snack(ok ? "Письмо отправлено" : "Не удалось отправить письмо");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function savePhone(ev) {
@@ -426,6 +452,36 @@ async function deleteAccount(ev) {
   location.replace("/");
 }
 
+/* ---------- окошко «добавьте почту» при входе в сервис ---------- */
+
+async function submitEmailNag(ev) {
+  ev.preventDefault();
+  const err = $("emailNagErr");
+  err.textContent = "";
+  const email = $("emailNagValue").value.trim();
+  if (!email) { err.textContent = "Введите почту"; return; }
+
+  const btn = ev.target.querySelector("button[type=submit]");
+  btn.disabled = true;
+  try {
+    // Без пароля — почты ещё нет, сервер её и не спросит (см. server.js).
+    const { ok, data } = await api("/api/account/email", { method: "PUT", body: { email } });
+    if (!ok) { err.textContent = data.message || "Не удалось сохранить почту"; return; }
+    // /authorize сам разберёт те же параметры из URL заново и теперь (почта
+    // уже есть) молча выдаст код вместо этого окошка.
+    location.replace("/authorize" + location.search);
+  } catch {
+    err.textContent = "Не удалось подключиться к серверу";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function skipEmailPrompt() {
+  await api("/api/account/email/dismiss", { method: "POST" });
+  location.replace("/authorize" + location.search);
+}
+
 /* ---------- старт ---------- */
 
 (async function init() {
@@ -438,6 +494,26 @@ async function deleteAccount(ev) {
     return;
   }
 
+  // Тоже самостоятельная — подтверждает сама, без формы, письмо могли
+  // открыть на другом устройстве, где сессии вообще нет.
+  if (location.pathname === "/verify-email") {
+    document.title = "Подтверждение почты — BurningHouse";
+    show("verifyCard", true);
+    const token = params.get("token");
+    if (!token) {
+      $("verifyTitle").textContent = "Ссылка неполная";
+      $("verifyMsg").textContent = "В адресе не хватает токена подтверждения.";
+    } else {
+      const { ok, data } = await api("/api/account/email/confirm", { method: "POST", body: { token } });
+      $("verifyTitle").textContent = ok ? "Почта подтверждена" : "Не получилось подтвердить";
+      $("verifyMsg").textContent = ok
+        ? "Теперь на неё можно прислать ссылку для восстановления пароля."
+        : (data.message || "Ссылка недействительна или устарела.");
+    }
+    show("verifyContinue", true);
+    return;
+  }
+
   const res = await api("/api/session");
   session = res.data || {};
 
@@ -445,8 +521,18 @@ async function deleteAccount(ev) {
     document.title = "Аккаунт — BurningHouse";
     renderUser(session.user);
     renderProfile(session.profile || { displayName: "", showDisplayName: false });
+    renderMailStatus(session.user.email, session.profile && session.profile.emailVerified);
     show("accountCard", true);
     loadSessions();
+    return;
+  }
+
+  // Вошёл, идёт в сервис через SSO, но у аккаунта до сих пор нет почты —
+  // мягкое окошко вместо молчаливого редиректа (см. /authorize в server.js).
+  // Пропустить можно: обработчик ниже просто повторяет тот же /authorize.
+  if (session.authenticated && flow && session.user && !session.user.email) {
+    document.title = "Добавьте почту — BurningHouse";
+    show("emailNagCard", true);
     return;
   }
 
@@ -467,6 +553,9 @@ $("forgotToggle").addEventListener("click", () => { mode = "forgot"; renderLogin
 $("resetForm").addEventListener("submit", submitReset);
 $("pwForm").addEventListener("submit", changePassword);
 $("mailForm").addEventListener("submit", saveEmail);
+$("mailResend").addEventListener("click", resendVerification);
+$("emailNagForm").addEventListener("submit", submitEmailNag);
+$("emailNagSkip").addEventListener("click", skipEmailPrompt);
 $("phoneForm").addEventListener("submit", savePhone);
 $("nameForm").addEventListener("submit", saveProfile);
 $("revokeAll").addEventListener("click", revokeAll);

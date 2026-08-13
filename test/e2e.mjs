@@ -126,6 +126,13 @@ const cookie = (r.headers.getSetCookie?.() || []).map(c => c.split(";")[0]).join
 const code = login.redirect && new URL(login.redirect).searchParams.get("code");
 ok("возврат ведёт на Finance", login.redirect?.startsWith(redirect), login.redirect);
 
+// "olduser" перенесён из старого Finance (import-finance) — почты у него нет,
+// а без неё GET /authorize не редиректит молча (см. server.js), что ломает
+// п.10 ниже (рестарт auth не разлогинивает — использует именно этот путь).
+await fetch(`${AUTH}/api/account/email/dismiss`, {
+  method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie, Origin: AUTH },
+});
+
 r = await fetch(`${AUTH}/oauth/token`, {
   method: "POST", headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ grant_type: "authorization_code", client_id: "finance", redirect_uri: redirect, code, code_verifier: verifier }),

@@ -76,6 +76,15 @@ const cookie = (r.headers.getSetCookie?.() || []).map(c => c.split(";")[0]).join
 ok("логин → redirect с кодом", r.status === 200 && login.redirect?.includes("code="), login.redirect);
 ok("логин ставит куку сессии", !!cookie, cookie);
 
+// "danil" заведён через adduser (CLI) — почты у него нет, а без неё GET
+// /authorize (используется ниже в freshSession) не редиректит молча, а
+// показывает мягкое окошко «добавьте почту» (см. server.js). Пропускаем —
+// проверка этого окошка не тема этого теста, он про сам механизм SSO/PKCE.
+r = await fetch(`${BASE}/api/account/email/dismiss`, {
+  method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie, Origin: BASE },
+});
+ok("окошко «добавьте почту» пропущено для теста SSO", r.status === 200);
+
 const code = new URL(login.redirect).searchParams.get("code");
 ok("state вернулся тем же", new URL(login.redirect).searchParams.get("state") === state);
 
