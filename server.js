@@ -33,6 +33,10 @@ const tokens = require("./lib/tokens");
 const pwlib = require("./lib/passwords");
 const mailer = require("./lib/mailer");
 const mailTpl = require("./lib/emailTemplates");
+const { db } = require("./lib/db");
+const { checkAdminKey, createAdminLog } = require("./admin-internal");
+
+const adminLog = createAdminLog(db);
 
 const ROOT = __dirname;
 const APP_HTML = path.join(ROOT, "index.html");
@@ -583,6 +587,76 @@ const server = http.createServer(async (req, res) => {
       return H.json(res, 200, { ok: true });
     }
 
+    /* --- внутренние ручки для Admin: server-to-server, проверка общим
+       ключом (см. admin-internal.js), а не SSO-токеном пользователя --- */
+
+    if (p === "/internal/stats" && method === "GET") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      return H.json(res, 200, {
+        ok: true,
+        users: store.countUsers(),
+        admins: store.countAdmins(),
+        clients: store.listClients().length,
+        activeSessions: store.countActiveSessions(),
+        activeBrowsers: store.countActiveSso(),
+      });
+    }
+
+    if (p === "/internal/users" && method === "GET") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      return H.json(res, 200, {
+        users: store.listUsers().map(u => ({
+          id: u.id, username: u.username, email: u.email || null,
+          createdAt: u.created_at, disabled: !!u.disabled, admin: !!u.is_admin,
+        })),
+      });
+    }
+
+    const userAdminMatch = p.match(/^\/internal\/users\/([\w-]+)\/admin$/);
+    if (userAdminMatch && method === "POST") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const u = store.getUserById(userAdminMatch[1]);
+      if (!u) return H.json(res, 404, { error: "not_found" });
+      const body = await H.readParams(req);
+      store.setAdmin(u.id, !!body.on);
+      adminLog.info(`${body.on ? "Выдан" : "Отозван"} доступ в Admin`, { username: u.username });
+      return H.json(res, 200, { ok: true });
+    }
+
+    const userDisabledMatch = p.match(/^\/internal\/users\/([\w-]+)\/disabled$/);
+    if (userDisabledMatch && method === "POST") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const u = store.getUserById(userDisabledMatch[1]);
+      if (!u) return H.json(res, 404, { error: "not_found" });
+      const body = await H.readParams(req);
+      store.setDisabled(u.id, !!body.on);
+      // Блокировка входа сама сессии не гасит (как в CLI) — для Admin это
+      // нежелательный сюрприз, поэтому здесь, в отличие от CLI, гасим сразу.
+      if (body.on) store.revokeAllSessions(u.id, "admin-disabled");
+      adminLog.warn(`${body.on ? "Заблокирован" : "Разблокирован"} вход`, { username: u.username });
+      return H.json(res, 200, { ok: true });
+    }
+
+    const userLogoutMatch = p.match(/^\/internal\/users\/([\w-]+)\/logout-all$/);
+    if (userLogoutMatch && method === "POST") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const u = store.getUserById(userLogoutMatch[1]);
+      if (!u) return H.json(res, 404, { error: "not_found" });
+      store.revokeAllSessions(u.id, "admin");
+      for (const s of store.listSso(u.id)) store.revokeSso(s.id);
+      adminLog.info("Принудительный выход из всех устройств", { username: u.username });
+      return H.json(res, 200, { ok: true });
+    }
+
+    if (p === "/internal/logs" && method === "GET") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const since = url.searchParams.get("since");
+      const limit = url.searchParams.get("limit");
+      return H.json(res, 200, {
+        logs: adminLog.recent({ since: since ? Number(since) : undefined, limit: limit ? Number(limit) : undefined }),
+      });
+    }
+
     /* --- статика и страница --- */
 
     if (method === "GET") {
@@ -594,6 +668,7 @@ const server = http.createServer(async (req, res) => {
     return H.json(res, 405, { error: "method_not_allowed" });
   } catch (e) {
     console.error("Необработанная ошибка:", e);
+    adminLog.error("Необработанная ошибка", { path: p, method, message: e.message });
     if (!res.headersSent) return H.json(res, 500, { error: "server_error" });
     res.end();
   }

@@ -23,10 +23,13 @@
 </div>
 
 <button class="icon-btn" id="themeBtn" type="button" title="Сменить тему" aria-label="Сменить тему"></button>
+<a class="icon-btn" id="homeBtn" href="https://burninghouse.ru" title="На главную" aria-label="На главную">
+  <svg class="icon" viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5M6 9.5V20h5v-6h2v6h5V9.5"/></svg>
+</a>
 
 <!-- Вход / регистрация. Показывается на /authorize без активной сессии и на / для гостя. -->
 <div class="card hidden" id="loginCard">
-  <a class="bh-lockup brand-lockup" href="/">
+  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
     <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
       <defs>
         <linearGradient id="bhFlameLogin" x1="0" y1="1" x2="0" y2="0">
@@ -98,7 +101,7 @@
      /api/authorize/reset в server.js. Токен подтверждает личность,
      текущий пароль вводить не нужно. -->
 <div class="card hidden" id="resetCard">
-  <a class="bh-lockup brand-lockup" href="/">
+  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
     <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
       <defs>
         <linearGradient id="bhFlameReset" x1="0" y1="1" x2="0" y2="0">
@@ -129,7 +132,7 @@
 
 <!-- Аккаунт: то, что видит вошедший пользователь на самом auth-домене. -->
 <div class="card wide hidden" id="accountCard">
-  <a class="bh-lockup brand-lockup" href="/">
+  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
     <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
       <defs>
         <linearGradient id="bhFlameAccount" x1="0" y1="1" x2="0" y2="0">

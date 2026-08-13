@@ -134,6 +134,10 @@ if (!user) return json(res, 401, { error: "unauthorized" });
 //   sid:       "…",             // id сессии, если нужен для логов
 //   clientId:  "notes",
 //   expiresAt: 1785404536000,
+//   admin:     false,           // true — пользователь помечен админом BurningHouse
+//                                // (Auth/lib/cli.js: make-admin). Нужно только
+//                                // сервисам, которые сами что-то от этого прячут
+//                                // или показывают; Admin проверяет его отдельно.
 // }
 ```
 

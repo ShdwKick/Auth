@@ -222,17 +222,20 @@ details[open] summary::after{transform:rotate(-135deg) translateY(-2px)}
 }
 .empty{font-size:13px;color:var(--md-sys-color-on-surface-variant);padding:12px 0}
 
-/* ---- переключатель темы — фиксирован в углу, виден на любой карточке ---- */
+/* ---- переключатель темы и кнопка «на главную» — фиксированы по углам, видны на любой карточке ---- */
 .icon-btn{
   position:fixed;top:16px;right:16px;z-index:5;
   width:44px;height:44px;border-radius:var(--r-full);
   border:0;background:transparent;color:var(--md-sys-color-on-surface-variant);
   cursor:pointer;display:grid;place-items:center;overflow:hidden;
+  text-decoration:none;
 }
 .icon-btn::after{content:"";position:absolute;inset:0;background:currentColor;opacity:0;transition:opacity .2s}
 .icon-btn:hover::after{opacity:.08}
 .icon-btn:active::after{opacity:.12}
 .icon{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* «На главную» — противоположный угол от переключателя темы, чтобы не перекрывались. */
+#homeBtn{right:auto;left:16px}
 
 .snack{
   position:fixed;left:50%;bottom:24px;transform:translate(-50%,80px);

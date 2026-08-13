@@ -23,6 +23,12 @@ services:
           "redirect_uris":["https://money.burninghouse.ru/"],
           "origins":["https://money.burninghouse.ru"]}]
 
+      # Общий секрет для Admin: доступ к /internal/* (статистика, логи,
+      # управление ролями) на этом сервисе и на Finance/Movies/Trip. Одно и то
+      # же значение — во всех compose разом, иначе Admin получит 403.
+      # Сгенерировать: openssl rand -hex 32
+      ADMIN_INTERNAL_KEY: замените-на-случайную-строку
+
       # Первый аккаунт при пустой базе (на существующую базу не влияет):
       # AUTH_USER: myname
       # AUTH_PASS: my-strong-password

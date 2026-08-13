@@ -8,6 +8,7 @@ WORKDIR /app
 
 # Только то, что нужно в рантайме
 COPY server.js ./
+COPY admin-internal.js ./
 COPY index.html ./
 COPY lib/ ./lib/
 COPY assets/ ./assets/

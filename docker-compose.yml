@@ -17,6 +17,9 @@ services:
       # обязан совпадать с тем, по какому адресу вы реально открываете страницу.
       ISSUER: http://localhost:8788
       DEV: "1"          # выключает Secure-куку (по http браузер её не отдаст)
+      # Общий секрет для Admin (/internal/*, см. admin-internal.js) — то же
+      # значение прописывается в Admin и во всех остальных сервисах.
+      ADMIN_INTERNAL_KEY: dev-admin-key
       # Первый аккаунт при пустой базе:
       # AUTH_USER: myname
       # AUTH_PASS: my-strong-password
