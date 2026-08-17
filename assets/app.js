@@ -23,6 +23,11 @@ const flow = params.get("client_id") ? {
 let mode = "login";        // login | register
 let session = null;        // { authenticated, user, registerClosed, registerCode }
 
+/* Пришли по ссылке-приглашению в друзья, но ещё не вошли — форма логина
+   покажется как обычно, но после входа нужно вернуться СЮДА (не туда, куда
+   сервер обычно ведёт "/"), чтобы дружба оформилась сама, а не потерялась. */
+const inviteReturn = location.pathname === "/friends/invite" ? location.pathname + location.search : null;
+
 /* ---------- тема ---------- */
 
 const THEME_KEY = "bh-theme";
@@ -197,8 +202,10 @@ async function submitLogin(ev) {
     const { ok, data } = await api(endpoint, { method: "POST", body });
     if (!ok) { err.textContent = data.message || "Не удалось войти"; return; }
     // Сервер уже поставил куку сессии; redirect ведёт либо обратно в сервис с
-    // одноразовым кодом, либо сюда же — на страницу аккаунта.
-    location.replace(data.redirect || "/");
+    // одноразовым кодом, либо на страницу аккаунта — КРОМЕ случая, когда сюда
+    // привела ссылка-приглашение: тогда возвращаемся на неё же, чтобы дружба
+    // оформилась, а не потерялась в редиректе на "/".
+    location.replace(inviteReturn || data.redirect || "/");
   } catch {
     err.textContent = "Не удалось подключиться к серверу";
   } finally {
@@ -207,6 +214,13 @@ async function submitLogin(ev) {
 }
 
 /* ---------- личный кабинет ---------- */
+
+/** Три вкладки вместо одного длинного столбика — переключение чисто визуальное,
+ *  данные всех вкладок уже загружены (loadSessions/loadFriends идут сразу). */
+function switchTab(name) {
+  for (const btn of document.querySelectorAll(".tab")) btn.setAttribute("aria-selected", String(btn.dataset.tab === name));
+  for (const panel of document.querySelectorAll(".tabpanel")) show(panel.id, panel.dataset.tabpanel === name);
+}
 
 function renderUser(user) {
   // Показываем имя, только если сам пользователь включил показ (user.name
@@ -398,6 +412,116 @@ async function saveProfile(ev) {
   snack("Имя сохранено");
 }
 
+/* ---------- друзья ---------- */
+
+/** Тот же визуальный ряд, что и у устройств (.session) — переиспользуем стиль,
+ *  меняются только кнопки под конкретный список (входящие/исходящие/друзья). */
+function friendRow(item, kind) {
+  const el = document.createElement("div");
+  el.className = "session";
+  el.innerHTML = `<div class="meta"><div class="title"></div><div class="desc"></div></div>`;
+  el.querySelector(".title").textContent = item.name;
+  el.querySelector(".desc").textContent = `@${item.username}` + (item.phone ? ` · ${item.phone}` : "");
+
+  if (kind === "incoming") {
+    const accept = document.createElement("button");
+    accept.className = "btn small tonal"; accept.type = "button"; accept.textContent = "Принять";
+    accept.onclick = () => acceptFriend(item.requestId);
+    el.append(accept);
+    const decline = document.createElement("button");
+    decline.className = "btn small danger"; decline.type = "button"; decline.textContent = "Отклонить";
+    decline.onclick = () => removeFriendRow(item.requestId);
+    el.append(decline);
+  } else if (kind === "outgoing") {
+    const cancel = document.createElement("button");
+    cancel.className = "btn small danger"; cancel.type = "button"; cancel.textContent = "Отменить";
+    cancel.onclick = () => removeFriendRow(item.requestId);
+    el.append(cancel);
+  } else {
+    const remove = document.createElement("button");
+    remove.className = "btn small danger"; remove.type = "button"; remove.textContent = "Удалить";
+    remove.onclick = () => removeFriendRow(item.friendshipId, `Удалить ${item.name} из друзей?`);
+    el.append(remove);
+  }
+  return el;
+}
+
+async function loadFriends() {
+  const { ok, data } = await api("/api/friends");
+  if (!ok) return;
+
+  show("friendsIncomingWrap", data.incoming.length > 0);
+  show("friendsBadge", data.incoming.length > 0); // заявки теперь за вкладкой, без точки их легко пропустить
+  const inc = $("friendsIncoming");
+  inc.textContent = "";
+  data.incoming.forEach(item => inc.append(friendRow(item, "incoming")));
+
+  const list = $("friendsList");
+  list.textContent = "";
+  if (!data.friends.length) list.innerHTML = '<div class="empty">Пока никого нет</div>';
+  else data.friends.forEach(item => list.append(friendRow(item, "friend")));
+
+  show("friendsOutgoingWrap", data.outgoing.length > 0);
+  const out = $("friendsOutgoing");
+  out.textContent = "";
+  data.outgoing.forEach(item => out.append(friendRow(item, "outgoing")));
+
+  $("friendInviteLink").value = data.inviteLink || "";
+}
+
+async function acceptFriend(id) {
+  const { ok } = await api(`/api/friends/${id}/accept`, { method: "POST" });
+  if (!ok) return snack("Не удалось принять заявку");
+  snack("Заявка принята");
+  loadFriends();
+}
+
+/** Одна функция на «отклонить входящую», «отменить исходящую» и «удалить из
+ *  друзей» — физически всегда одна и та же операция на сервере (см. server.js). */
+async function removeFriendRow(id, confirmMsg) {
+  if (confirmMsg && !confirm(confirmMsg)) return;
+  const { ok } = await api(`/api/friends/${id}`, { method: "DELETE" });
+  if (!ok) return snack("Не удалось выполнить действие");
+  loadFriends();
+}
+
+async function sendFriendRequest(ev) {
+  ev.preventDefault();
+  const err = $("friendReqErr");
+  const okEl = $("friendReqOk");
+  err.textContent = ""; okEl.textContent = "";
+  const username = $("friendUsername").value.trim();
+  if (!username) { err.textContent = "Введите логин"; return; }
+
+  const { ok, data } = await api("/api/friends/request", { method: "POST", body: { username } });
+  if (!ok) { err.textContent = data.message || "Не удалось отправить заявку"; return; }
+  $("friendUsername").value = "";
+  okEl.textContent = data.accepted ? "У вас уже была встречная заявка — вы сразу друзья" : "Заявка отправлена";
+  loadFriends();
+}
+
+async function copyInviteLink() {
+  const field = $("friendInviteLink");
+  if (!field.value) return;
+  try {
+    await navigator.clipboard.writeText(field.value);
+    snack("Ссылка скопирована");
+  } catch {
+    // Буфер обмена может быть недоступен (нет разрешения браузера и т.п.) —
+    // выделяем текст, чтобы скопировать можно было вручную.
+    field.select();
+    snack("Скопируйте ссылку вручную (Ctrl+C)");
+  }
+}
+
+async function regenerateInviteLink() {
+  if (!confirm("Старая ссылка перестанет работать. Обновить?")) return;
+  const { ok, data } = await api("/api/friends/invite/regenerate", { method: "POST" });
+  if (!ok) return snack("Не удалось обновить ссылку");
+  $("friendInviteLink").value = data.inviteLink;
+  snack("Ссылка обновлена");
+}
+
 /* ---------- сброс пароля по ссылке (/reset?token=...) ---------- */
 
 async function submitReset(ev) {
@@ -514,6 +638,36 @@ async function skipEmailPrompt() {
     return;
   }
 
+  // Ссылка-приглашение в друзья — самостоятельная страница. Нужен вход:
+  // если сессии нет, показываем обычную форму (submitLogin сам вернёт сюда
+  // же через inviteReturn), если есть — сразу оформляем дружбу.
+  if (location.pathname === "/friends/invite") {
+    const token = params.get("token");
+    if (!token) { location.replace("/"); return; }
+
+    const res = await api("/api/session");
+    session = res.data || {};
+
+    if (!session.authenticated) {
+      document.title = "Войдите — BurningHouse";
+      mode = "login";
+      renderLoginMode();
+      show("loginCard", true);
+      setTimeout(() => $("fUser").focus(), 100);
+      return;
+    }
+
+    document.title = "Друзья — BurningHouse";
+    show("friendInviteCard", true);
+    const { ok, data } = await api("/api/friends/invite/accept", { method: "POST", body: { token } });
+    $("friendInviteTitle").textContent = ok ? (data.already ? "Вы уже друзья" : "Готово!") : "Не получилось";
+    $("friendInviteMsg").textContent = ok
+      ? `Вы и ${data.friend.name} ${data.already ? "уже " : ""}друзья на BurningHouse.`
+      : (data.message || "Ссылка недействительна.");
+    show("friendInviteContinue", true);
+    return;
+  }
+
   const res = await api("/api/session");
   session = res.data || {};
 
@@ -524,6 +678,7 @@ async function skipEmailPrompt() {
     renderMailStatus(session.user.email, session.profile && session.profile.emailVerified);
     show("accountCard", true);
     loadSessions();
+    loadFriends();
     return;
   }
 
@@ -559,5 +714,9 @@ $("emailNagSkip").addEventListener("click", skipEmailPrompt);
 $("phoneForm").addEventListener("submit", savePhone);
 $("nameForm").addEventListener("submit", saveProfile);
 $("revokeAll").addEventListener("click", revokeAll);
+$("friendRequestForm").addEventListener("submit", sendFriendRequest);
+$("friendCopyInvite").addEventListener("click", copyInviteLink);
+$("friendRegenInvite").addEventListener("click", regenerateInviteLink);
+for (const btn of document.querySelectorAll(".tab")) btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 $("deleteForm").addEventListener("submit", deleteAccount);
 $("logoutBtn").addEventListener("click", logout);

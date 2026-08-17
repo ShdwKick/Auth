@@ -186,7 +186,11 @@ function sendVerificationEmail(userId, email) {
 
 /* ---------- маршруты ---------- */
 
-const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo|\/\.well-known\/)/;
+// /api/friends — только сам список (GET), не мутации: другому сервису (Trip
+// и т.п.) можно предложить друзей из BurningHouse по чужому access-токену,
+// но добавлять/принимать/удалять — только с самого auth-домена (см. ниже,
+// эти пути под /api/friends/... своего "$" нарочно не получают).
+const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo$|\/api\/friends$|\/\.well-known\/)/;
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, cfg.ISSUER);
@@ -648,6 +652,97 @@ const server = http.createServer(async (req, res) => {
       return H.json(res, 200, { ok: true });
     }
 
+    /* --- друзья --- */
+
+    const FRIEND_ERR = {
+      self: "Нельзя добавить в друзья самого себя",
+      already_friends: "Вы уже друзья",
+      already_requested: "Заявка уже отправлена",
+      not_found: "Заявка не найдена",
+      cant_accept_own: "Нельзя принять собственную заявку",
+    };
+
+    // GET, не мутация — единственный путь из /api/friends/*, доступный другим
+    // сервисам по Bearer-токену (см. CORS_PATHS выше), не только с cookie.
+    if (p === "/api/friends" && method === "GET") {
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      return H.json(res, 200, {
+        friends: store.listFriends(auth.user.id),
+        incoming: store.listIncomingRequests(auth.user.id),
+        outgoing: store.listOutgoingRequests(auth.user.id),
+        inviteLink: `${cfg.ISSUER}/friends/invite?token=${store.getOrCreateInviteToken(auth.user.id)}`,
+      });
+    }
+
+    if (p === "/api/friends/request" && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const body = await H.readParams(req);
+
+      const target = store.getUserByName(pwlib.normalizeUsername(body.username));
+      if (!target || target.disabled) return H.json(res, 404, { error: "not_found", message: "Такого логина нет" });
+
+      const r = store.sendFriendRequest(auth.user.id, target.id);
+      if (r.error) return H.json(res, 409, { error: r.error, message: FRIEND_ERR[r.error] || "Не удалось отправить заявку" });
+      return H.json(res, 200, { ok: true, accepted: !!r.accepted });
+    }
+
+    if (p === "/api/friends/invite/regenerate" && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+
+      const token = store.regenerateInviteToken(auth.user.id);
+      return H.json(res, 200, { ok: true, inviteLink: `${cfg.ISSUER}/friends/invite?token=${token}` });
+    }
+
+    // Переход по чужой персональной ссылке — сразу дружба, без отдельного
+    // подтверждения (см. чат: «перешёл и вошёл — сразу друг», как в Trip).
+    if (p === "/api/friends/invite/accept" && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const body = await H.readParams(req);
+
+      const owner = store.getUserByInviteToken(body.token);
+      if (!owner || owner.disabled) return H.json(res, 404, { error: "not_found", message: "Ссылка недействительна" });
+
+      const r = store.acceptFriendInvite(auth.user.id, owner.id);
+      if (r.error && r.error !== "already_friends") return H.json(res, 409, { error: r.error, message: FRIEND_ERR[r.error] });
+      return H.json(res, 200, {
+        ok: true, already: r.error === "already_friends",
+        friend: { username: owner.username, name: owner.display_name || owner.username },
+      });
+    }
+
+    // /accept идёт РАНЬШЕ общего /api/friends/:id — иначе не различить
+    // /api/friends/<id>/accept и просто /api/friends/<id>.
+    const friendAcceptMatch = p.match(/^\/api\/friends\/([\w-]+)\/accept$/);
+    if (friendAcceptMatch && method === "POST") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+
+      const r = store.acceptFriendRequest(friendAcceptMatch[1], auth.user.id);
+      if (r.error) return H.json(res, 404, { error: r.error, message: FRIEND_ERR[r.error] || "Заявка не найдена" });
+      return H.json(res, 200, { ok: true });
+    }
+
+    // Одна ручка на «отклонить входящую», «отменить исходящую» и «удалить из
+    // друзей» — везде физически одна и та же строка связи, см. store.js.
+    const friendMatch = p.match(/^\/api\/friends\/([\w-]+)$/);
+    if (friendMatch && method === "DELETE") {
+      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+
+      const removed = store.removeFriendship(friendMatch[1], auth.user.id);
+      if (!removed) return H.json(res, 404, { error: "not_found" });
+      return H.json(res, 200, { ok: true });
+    }
+
     /* --- внутренние ручки для Admin: server-to-server, проверка общим
        ключом (см. admin-internal.js), а не SSO-токеном пользователя --- */
 
@@ -739,7 +834,7 @@ const server = http.createServer(async (req, res) => {
 
     if (method === "GET") {
       if (H.serveStatic(res, p, ROOT)) return;
-      if (p === "/" || p === "/index.html" || p === "/reset" || p === "/verify-email") return serveApp(res);
+      if (p === "/" || p === "/index.html" || p === "/reset" || p === "/verify-email" || p === "/friends/invite") return serveApp(res);
       return errorPage(res, 404, "Страница не найдена", "Проверьте адрес.");
     }
 

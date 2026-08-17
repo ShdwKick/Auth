@@ -2,6 +2,11 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<!-- serveApp() отдаёт этот же файл на любом пути (/, /reset, /verify-email,
+     /friends/invite — он двухсегментный!), а относительные assets/... без
+     <base> резолвились бы от текущего пути, а не от корня: на /friends/invite
+     ушли бы в несуществующий /friends/assets/... и стили с скриптом не грузились бы. -->
+<base href="/">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <meta name="color-scheme" content="light dark">
@@ -22,8 +27,8 @@
   <div class="bh-layer bh-sparks" data-bh-sparks="6"></div>
 </div>
 
-<button class="icon-btn" id="themeBtn" type="button" title="Сменить тему" aria-label="Сменить тему"></button>
-<a class="icon-btn" id="homeBtn" href="https://burninghouse.ru" title="На главную" aria-label="На главную">
+<button class="icon-btn icon-btn--corner" id="themeBtn" type="button" title="Сменить тему" aria-label="Сменить тему"></button>
+<a class="icon-btn icon-btn--corner" id="homeBtn" href="https://burninghouse.ru" title="На главную" aria-label="На главную">
   <svg class="icon" viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5M6 9.5V20h5v-6h2v6h5V9.5"/></svg>
 </a>
 
@@ -82,7 +87,7 @@
         </div>
         <label class="check-row" id="fSharePhoneWrap">
           <input id="fSharePhone" type="checkbox">
-          <span>Разрешить сервисам получать телефон для переводов</span>
+          <span>Показывать телефон друзьям и сервисам (для переводов)</span>
         </label>
         <div class="field hidden" id="fCodeWrap">
           <input id="fCode" name="code" type="text" placeholder=" " autocomplete="off">
@@ -183,6 +188,29 @@
   <a class="btn filled full hidden" id="verifyContinue" href="https://burninghouse.ru">Готово</a>
 </div>
 
+<!-- Открывается по личной ссылке-приглашению (?token=...) — см. /friends/invite
+     и /api/friends/invite/accept в server.js. Если человек ещё не вошёл,
+     сначала показывается обычная форма входа (см. init() в app.js) — после
+     входа он возвращается сюда же и дружба оформляется сама. -->
+<div class="card hidden" id="friendInviteCard">
+  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
+    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
+      <defs>
+        <linearGradient id="bhFlameInvite" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+        </linearGradient>
+      </defs>
+      <path class="bh-flame" fill="url(#bhFlameInvite)" fill-rule="evenodd"
+            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+    </svg>
+    <span class="bh-name">BurningHouse</span>
+  </a>
+  <h1 id="friendInviteTitle">Добавляем в друзья…</h1>
+  <p class="sub" id="friendInviteMsg"></p>
+  <a class="btn filled full hidden" id="friendInviteContinue" href="https://burninghouse.ru">Готово</a>
+</div>
+
 <!-- Аккаунт: то, что видит вошедший пользователь на самом auth-домене. -->
 <div class="card wide hidden" id="accountCard">
   <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
@@ -209,75 +237,121 @@
   </div>
   <p class="sub">Этот аккаунт общий для всех сервисов BurningHouse.</p>
 
-  <details id="nameBlock">
-    <summary>Имя</summary>
-    <form id="nameForm">
-      <div class="field"><input id="nameValue" type="text" placeholder=" " maxlength="60" autocomplete="name"><label for="nameValue">Имя</label></div>
-      <label class="check-row"><input id="nameShow" type="checkbox"><span>Показывать сервисам вместо логина</span></label>
-      <div class="err" id="nameErr"></div>
-      <button class="btn tonal full" type="submit">Сохранить имя</button>
-    </form>
-    <p class="sub">Пока выключено — сервисы видят только логин, как раньше.</p>
-  </details>
+  <!-- Три вкладки вместо одного длинного столбика аккордеонов: Профиль —
+       что видно другим (имя/почта/телефон), Друзья — сам список и заявки,
+       Безопасность — пароль, устройства и самое необратимое (удаление). -->
+  <div class="tabs" role="tablist">
+    <button class="tab" type="button" role="tab" id="tabBtnProfile" aria-selected="true" data-tab="profile">Профиль</button>
+    <button class="tab" type="button" role="tab" id="tabBtnFriends" aria-selected="false" data-tab="friends">Друзья<span class="tab-badge hidden" id="friendsBadge"></span></button>
+    <button class="tab" type="button" role="tab" id="tabBtnSecurity" aria-selected="false" data-tab="security">Безопасность</button>
+  </div>
 
-  <details id="pwBlock">
-    <summary>Сменить пароль</summary>
-    <form id="pwForm">
-      <div class="field"><input id="pwCur" type="password" placeholder=" " autocomplete="current-password"><label for="pwCur">Текущий пароль</label></div>
-      <div class="field"><input id="pwNew" type="password" placeholder=" " autocomplete="new-password"><label for="pwNew">Новый пароль</label></div>
-      <div class="field"><input id="pwNew2" type="password" placeholder=" " autocomplete="new-password"><label for="pwNew2">Повторите новый</label></div>
-      <div class="err" id="pwErr"></div>
-      <button class="btn tonal full" type="submit">Сохранить пароль</button>
-    </form>
-    <p class="sub">После смены пароля все остальные устройства придётся авторизовать заново.</p>
-  </details>
+  <div class="tabpanel" id="tabPanelProfile" data-tabpanel="profile">
+    <details id="nameBlock">
+      <summary>Имя</summary>
+      <form id="nameForm">
+        <div class="field"><input id="nameValue" type="text" placeholder=" " maxlength="60" autocomplete="name"><label for="nameValue">Имя</label></div>
+        <label class="check-row"><input id="nameShow" type="checkbox"><span>Показывать сервисам вместо логина</span></label>
+        <div class="err" id="nameErr"></div>
+        <button class="btn tonal full" type="submit">Сохранить имя</button>
+      </form>
+      <p class="sub">Сервисам имя видно, только если галочка включена — иначе только логин, как раньше. Друзьям на BurningHouse имя видно всегда, независимо от неё.</p>
+    </details>
 
-  <details id="mailBlock">
-    <summary>Почта</summary>
-    <form id="mailForm">
-      <div class="field"><input id="mailValue" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false"><label for="mailValue">Адрес почты</label></div>
-      <div class="field" id="mailPassWrap"><input id="mailPass" type="password" placeholder=" " autocomplete="current-password"><label for="mailPass">Текущий пароль</label></div>
-      <div class="err" id="mailErr"></div>
-      <div class="ok" id="mailOk"></div>
-      <button class="btn tonal full" type="submit">Сохранить почту</button>
-    </form>
-    <p class="sub" id="mailStatus"></p>
-    <button class="link-btn hidden" id="mailResend" type="button">Отправить письмо с подтверждением ещё раз</button>
-  </details>
+    <details id="mailBlock">
+      <summary>Почта</summary>
+      <form id="mailForm">
+        <div class="field"><input id="mailValue" type="email" placeholder=" " autocomplete="email" autocapitalize="none" spellcheck="false"><label for="mailValue">Адрес почты</label></div>
+        <div class="field" id="mailPassWrap"><input id="mailPass" type="password" placeholder=" " autocomplete="current-password"><label for="mailPass">Текущий пароль</label></div>
+        <div class="err" id="mailErr"></div>
+        <div class="ok" id="mailOk"></div>
+        <button class="btn tonal full" type="submit">Сохранить почту</button>
+      </form>
+      <p class="sub" id="mailStatus"></p>
+      <button class="link-btn hidden" id="mailResend" type="button">Отправить письмо с подтверждением ещё раз</button>
+    </details>
 
-  <details id="phoneBlock">
-    <summary>Телефон</summary>
-    <form id="phoneForm">
-      <div class="field"><input id="phoneValue" type="tel" placeholder=" " autocomplete="tel" inputmode="tel"><label for="phoneValue">Номер телефона</label></div>
-      <label class="check-row"><input id="phoneShare" type="checkbox"><span>Разрешить сервисам получать телефон для переводов</span></label>
-      <div class="field"><input id="phonePass" type="password" placeholder=" " autocomplete="current-password"><label for="phonePass">Текущий пароль</label></div>
-      <div class="err" id="phoneErr"></div>
-      <button class="btn tonal full" type="submit">Сохранить телефон</button>
-    </form>
-    <p class="sub">Без галочки номер знает только этот кабинет. С галочкой — его
-      сможет запросить сервис, которому вы уже вошли (например, чтобы принять
-      от вас перевод); кому именно его показывать внутри себя — решает сам
-      сервис, не эта настройка.</p>
-  </details>
+    <details id="phoneBlock">
+      <summary>Телефон</summary>
+      <form id="phoneForm">
+        <div class="field"><input id="phoneValue" type="tel" placeholder=" " autocomplete="tel" inputmode="tel"><label for="phoneValue">Номер телефона</label></div>
+        <label class="check-row"><input id="phoneShare" type="checkbox"><span>Показывать телефон друзьям и сервисам (для переводов)</span></label>
+        <div class="field"><input id="phonePass" type="password" placeholder=" " autocomplete="current-password"><label for="phonePass">Текущий пароль</label></div>
+        <div class="err" id="phoneErr"></div>
+        <button class="btn tonal full" type="submit">Сохранить телефон</button>
+      </form>
+      <p class="sub">Без галочки номер знает только этот кабинет. С галочкой его увидят
+        ваши друзья на BurningHouse и сможет запросить сервис, которому вы уже
+        вошли (например, чтобы принять от вас перевод); кому именно его
+        показывать внутри себя — решает сам сервис, не эта настройка.</p>
+    </details>
+  </div>
 
-  <details id="sessBlock">
-    <summary>Устройства и сервисы</summary>
-    <div id="sessList"><div class="empty">Загрузка…</div></div>
-    <button class="btn danger full" id="revokeAll" type="button">Отозвать все доступы сервисов</button>
-  </details>
+  <div class="tabpanel hidden" id="tabPanelFriends" data-tabpanel="friends">
+    <div id="friendsIncomingWrap" class="request-group hidden">
+      <h2>Заявки вам</h2>
+      <div id="friendsIncoming"></div>
+    </div>
 
-  <details id="deleteBlock">
-    <summary>Удалить аккаунт</summary>
-    <p class="sub">Аккаунт и все данные (сессии, история входов) удаляются без возможности восстановления, доступ ко всем сервисам BurningHouse пропадёт сразу. Чтобы подтвердить, наберите логин <strong id="deleteUserHint"></strong> в поле ниже.</p>
-    <form id="deleteForm">
-      <div class="field">
-        <input id="deleteUser" type="text" placeholder=" " autocomplete="off" autocapitalize="none" spellcheck="false">
-        <label for="deleteUser">Логин для подтверждения</label>
-      </div>
-      <div class="err" id="deleteErr"></div>
-      <button class="btn danger full" type="submit">Удалить аккаунт навсегда</button>
+    <div id="friendsOutgoingWrap" class="request-group hidden">
+      <h2>Отправленные заявки</h2>
+      <div id="friendsOutgoing"></div>
+    </div>
+
+    <div id="friendsListWrap">
+      <div id="friendsList"><div class="empty">Пока никого нет</div></div>
+    </div>
+
+    <form id="friendRequestForm">
+      <div class="field"><input id="friendUsername" type="text" placeholder=" " autocapitalize="none" spellcheck="false"><label for="friendUsername">Логин друга</label></div>
+      <div class="err" id="friendReqErr"></div>
+      <div class="ok" id="friendReqOk"></div>
+      <button class="btn tonal full" type="submit">Отправить заявку</button>
     </form>
-  </details>
+
+    <p class="sub">Или поделитесь личной ссылкой — тот, кто перейдёт по ней и
+      войдёт в свой аккаунт, сразу станет другом, без отдельного подтверждения.</p>
+    <div class="input-row">
+      <div class="field"><input id="friendInviteLink" type="text" readonly><label for="friendInviteLink">Ваша ссылка-приглашение</label></div>
+      <button class="icon-btn" id="friendCopyInvite" type="button" title="Скопировать ссылку" aria-label="Скопировать ссылку">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" ry="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+      </button>
+    </div>
+    <button class="link-btn" id="friendRegenInvite" type="button">Ссылка ушла не туда? Обновить</button>
+  </div>
+
+  <div class="tabpanel hidden" id="tabPanelSecurity" data-tabpanel="security">
+    <details id="pwBlock">
+      <summary>Сменить пароль</summary>
+      <form id="pwForm">
+        <div class="field"><input id="pwCur" type="password" placeholder=" " autocomplete="current-password"><label for="pwCur">Текущий пароль</label></div>
+        <div class="field"><input id="pwNew" type="password" placeholder=" " autocomplete="new-password"><label for="pwNew">Новый пароль</label></div>
+        <div class="field"><input id="pwNew2" type="password" placeholder=" " autocomplete="new-password"><label for="pwNew2">Повторите новый</label></div>
+        <div class="err" id="pwErr"></div>
+        <button class="btn tonal full" type="submit">Сохранить пароль</button>
+      </form>
+      <p class="sub">После смены пароля все остальные устройства придётся авторизовать заново.</p>
+    </details>
+
+    <details id="sessBlock">
+      <summary>Устройства и сервисы</summary>
+      <div id="sessList"><div class="empty">Загрузка…</div></div>
+      <button class="btn danger full" id="revokeAll" type="button">Отозвать все доступы сервисов</button>
+    </details>
+
+    <details id="deleteBlock">
+      <summary>Удалить аккаунт</summary>
+      <p class="sub">Аккаунт и все данные (сессии, история входов) удаляются без возможности восстановления, доступ ко всем сервисам BurningHouse пропадёт сразу. Чтобы подтвердить, наберите логин <strong id="deleteUserHint"></strong> в поле ниже.</p>
+      <form id="deleteForm">
+        <div class="field">
+          <input id="deleteUser" type="text" placeholder=" " autocomplete="off" autocapitalize="none" spellcheck="false">
+          <label for="deleteUser">Логин для подтверждения</label>
+        </div>
+        <div class="err" id="deleteErr"></div>
+        <button class="btn danger full" type="submit">Удалить аккаунт навсегда</button>
+      </form>
+    </details>
+  </div>
 
   <button class="btn outlined full" id="logoutBtn" type="button">Выйти</button>
 </div>

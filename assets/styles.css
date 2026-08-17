@@ -125,6 +125,10 @@ h2{font-size:15px;font-weight:600;margin:24px 0 4px}
 .sub{font-size:13px;color:var(--md-sys-color-on-surface-variant);margin:6px 0}
 .err{color:var(--md-sys-color-error);font-size:13px;min-height:18px;margin-top:10px}
 .ok{color:var(--md-sys-color-primary);font-size:13px;min-height:18px;margin-top:10px}
+/* Пустые — совсем без места: формы вроде friendRequestForm держат .err И .ok
+   рядом одновременно (одно на ошибку, другое на успех), и оба с одинаковым
+   min-height давали ~56px пустоты перед кнопкой, когда сообщать было нечего. */
+.err:empty, .ok:empty{min-height:0;margin-top:0}
 .hidden{display:none !important}
 
 /* ---- флажок-настройка (нативный checkbox + accent-color: своя тема без
@@ -193,6 +197,38 @@ h2{font-size:15px;font-weight:600;margin:24px 0 4px}
 .who .name{font-size:20px;font-weight:600;line-height:1.2}
 .who .mail{font-size:13px;color:var(--md-sys-color-on-surface-variant);word-break:break-all}
 
+/* ---- вкладки кабинета (Профиль / Друзья / Безопасность) ---- */
+.tabs{display:flex;gap:4px;margin-top:18px;border-bottom:1px solid var(--md-sys-color-outline-variant)}
+.tab{
+  flex:1;background:none;border:0;padding:11px 4px;font:inherit;font-size:14px;font-weight:600;
+  color:var(--md-sys-color-on-surface-variant);cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  transition:color .15s,border-color .15s;
+}
+.tab:hover{color:var(--md-sys-color-on-surface)}
+.tab[aria-selected="true"]{color:var(--md-sys-color-primary);border-bottom-color:var(--md-sys-color-primary)}
+/* Точка «есть непрочитанное» — заявки в друзья теперь за вкладкой, не видны
+   с одного взгляда, как раньше были в общем списке аккордеонов. */
+.tab-badge{
+  display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--md-sys-color-error);margin-left:6px;vertical-align:middle;
+}
+/* margin-top на панели, не на первом details — у вкладки «Друзья» первый
+   элемент не details, а div (список), правило должно работать для обеих форм. */
+.tabpanel{margin-top:14px}
+.tabpanel details:first-child{margin-top:0}
+
+/* Заявки — в подсвеченном коробе, отдельно от уже принятых друзей ниже:
+   разные по смыслу вещи (кто-то ждёт вашего решения vs уже состоявшаяся связь). */
+.request-group{
+  background:var(--md-sys-color-secondary-container);
+  border-radius:var(--r-m);
+  padding:2px 14px 10px;
+  margin-bottom:16px;
+}
+.request-group h2{color:var(--md-sys-color-on-secondary-container);margin-top:14px}
+.request-group .session{border-top-color:color-mix(in srgb, var(--md-sys-color-on-secondary-container) 15%, transparent)}
+
 details{
   border:1px solid var(--md-sys-color-outline-variant);border-radius:var(--r-m);
   padding:0 16px;margin-top:10px;
@@ -224,8 +260,8 @@ details[open] summary::after{transform:rotate(-135deg) translateY(-2px)}
 
 /* ---- переключатель темы и кнопка «на главную» — фиксированы по углам, видны на любой карточке ---- */
 .icon-btn{
-  position:fixed;top:16px;right:16px;z-index:5;
-  width:44px;height:44px;border-radius:var(--r-full);
+  position:relative;
+  width:44px;height:44px;border-radius:var(--r-full);flex:none;
   border:0;background:transparent;color:var(--md-sys-color-on-surface-variant);
   cursor:pointer;display:grid;place-items:center;overflow:hidden;
   text-decoration:none;
@@ -234,8 +270,15 @@ details[open] summary::after{transform:rotate(-135deg) translateY(-2px)}
 .icon-btn:hover::after{opacity:.08}
 .icon-btn:active::after{opacity:.12}
 .icon{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* Тема/на главную — плавающие кнопки в углах экрана, а не в потоке страницы. */
+.icon-btn--corner{position:fixed;top:16px;right:16px;z-index:5}
 /* «На главную» — противоположный угол от переключателя темы, чтобы не перекрывались. */
 #homeBtn{right:auto;left:16px}
+
+/* ---- поле + иконка-кнопка рядом (ссылка-приглашение и т.п.) ---- */
+.input-row{display:flex;gap:8px;align-items:center;margin-top:12px}
+.input-row .field{flex:1;margin-top:0;min-width:0}
+.input-row .icon-btn{border:1px solid var(--md-sys-color-outline-variant)}
 
 .snack{
   position:fixed;left:50%;bottom:24px;transform:translate(-50%,80px);
