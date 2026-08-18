@@ -118,7 +118,8 @@ body{
 /* Локап: знак, бренд, при необходимости — название сервиса.
    Прежняя плашка со щитом (.brand) убрана — знак теперь фирменный. */
 .brand-lockup{margin-bottom:18px;font-size:16px}
-.brand-lockup:focus-visible{outline:2px solid var(--md-sys-color-primary);outline-offset:4px;border-radius:6px}
+.brand-lockup .bh-lockup-mark:focus-visible,
+.brand-lockup .bh-lockup-name:focus-visible{outline:2px solid var(--md-sys-color-primary);outline-offset:4px;border-radius:6px}
 
 h1{font-size:26px;font-weight:600;letter-spacing:-.01em}
 h2{font-size:15px;font-weight:600;margin:24px 0 4px}

@@ -34,19 +34,23 @@
 
 <!-- Вход / регистрация. Показывается на /authorize без активной сессии и на / для гостя. -->
 <div class="card hidden" id="loginCard">
-  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
-    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
-      <defs>
-        <linearGradient id="bhFlameLogin" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
-          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
-        </linearGradient>
-      </defs>
-      <path class="bh-flame" fill="url(#bhFlameLogin)" fill-rule="evenodd"
-            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
-    </svg>
-    <span class="bh-name">BurningHouse</span>
-  </a>
+  <div class="bh-lockup brand-lockup">
+    <a class="bh-lockup-mark" href="/" aria-label="Вход — на главную сервиса">
+      <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <defs>
+          <linearGradient id="bhFlameLogin" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+            <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+          </linearGradient>
+        </defs>
+        <path class="bh-flame" fill="url(#bhFlameLogin)" fill-rule="evenodd"
+              d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+      </svg>
+    </a>
+    <a class="bh-lockup-name" href="https://burninghouse.ru" aria-label="BurningHouse — каталог сервисов">
+      <span class="bh-name">BurningHouse</span>
+    </a>
+  </div>
   <h1 id="loginTitle">Вход</h1>
   <p class="sub" id="loginDesc">Единый аккаунт для сервисов BurningHouse.</p>
 
@@ -107,19 +111,23 @@
      Пропустить можно — email_prompt_dismissed не даёт спросить снова в
      рамках этой же SSO-сессии. -->
 <div class="card hidden" id="emailNagCard">
-  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
-    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
-      <defs>
-        <linearGradient id="bhFlameNag" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
-          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
-        </linearGradient>
-      </defs>
-      <path class="bh-flame" fill="url(#bhFlameNag)" fill-rule="evenodd"
-            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
-    </svg>
-    <span class="bh-name">BurningHouse</span>
-  </a>
+  <div class="bh-lockup brand-lockup">
+    <a class="bh-lockup-mark" href="/" aria-label="Вход — на главную сервиса">
+      <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <defs>
+          <linearGradient id="bhFlameNag" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+            <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+          </linearGradient>
+        </defs>
+        <path class="bh-flame" fill="url(#bhFlameNag)" fill-rule="evenodd"
+              d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+      </svg>
+    </a>
+    <a class="bh-lockup-name" href="https://burninghouse.ru" aria-label="BurningHouse — каталог сервисов">
+      <span class="bh-name">BurningHouse</span>
+    </a>
+  </div>
   <h1>Укажите почту</h1>
   <p class="sub">Без неё нельзя будет восстановить пароль, если забудете его. Можно добавить сейчас или пропустить и сделать это позже — из кабинета.</p>
   <form id="emailNagForm">
@@ -137,19 +145,23 @@
      /api/authorize/reset в server.js. Токен подтверждает личность,
      текущий пароль вводить не нужно. -->
 <div class="card hidden" id="resetCard">
-  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
-    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
-      <defs>
-        <linearGradient id="bhFlameReset" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
-          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
-        </linearGradient>
-      </defs>
-      <path class="bh-flame" fill="url(#bhFlameReset)" fill-rule="evenodd"
-            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
-    </svg>
-    <span class="bh-name">BurningHouse</span>
-  </a>
+  <div class="bh-lockup brand-lockup">
+    <a class="bh-lockup-mark" href="/" aria-label="Вход — на главную сервиса">
+      <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <defs>
+          <linearGradient id="bhFlameReset" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+            <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+          </linearGradient>
+        </defs>
+        <path class="bh-flame" fill="url(#bhFlameReset)" fill-rule="evenodd"
+              d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+      </svg>
+    </a>
+    <a class="bh-lockup-name" href="https://burninghouse.ru" aria-label="BurningHouse — каталог сервисов">
+      <span class="bh-name">BurningHouse</span>
+    </a>
+  </div>
   <h1>Новый пароль</h1>
   <p class="sub">Придумайте новый пароль для входа.</p>
   <form id="resetForm">
@@ -170,19 +182,23 @@
      /verify-email и /api/account/email/confirm в server.js. Подтверждает
      сама, без участия человека — карточка только показывает результат. -->
 <div class="card hidden" id="verifyCard">
-  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
-    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
-      <defs>
-        <linearGradient id="bhFlameVerify" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
-          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
-        </linearGradient>
-      </defs>
-      <path class="bh-flame" fill="url(#bhFlameVerify)" fill-rule="evenodd"
-            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
-    </svg>
-    <span class="bh-name">BurningHouse</span>
-  </a>
+  <div class="bh-lockup brand-lockup">
+    <a class="bh-lockup-mark" href="/" aria-label="Вход — на главную сервиса">
+      <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <defs>
+          <linearGradient id="bhFlameVerify" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+            <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+          </linearGradient>
+        </defs>
+        <path class="bh-flame" fill="url(#bhFlameVerify)" fill-rule="evenodd"
+              d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+      </svg>
+    </a>
+    <a class="bh-lockup-name" href="https://burninghouse.ru" aria-label="BurningHouse — каталог сервисов">
+      <span class="bh-name">BurningHouse</span>
+    </a>
+  </div>
   <h1 id="verifyTitle">Подтверждаем почту…</h1>
   <p class="sub" id="verifyMsg"></p>
   <a class="btn filled full hidden" id="verifyContinue" href="https://burninghouse.ru">Готово</a>
@@ -193,19 +209,23 @@
      сначала показывается обычная форма входа (см. init() в app.js) — после
      входа он возвращается сюда же и дружба оформляется сама. -->
 <div class="card hidden" id="friendInviteCard">
-  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
-    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
-      <defs>
-        <linearGradient id="bhFlameInvite" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
-          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
-        </linearGradient>
-      </defs>
-      <path class="bh-flame" fill="url(#bhFlameInvite)" fill-rule="evenodd"
-            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
-    </svg>
-    <span class="bh-name">BurningHouse</span>
-  </a>
+  <div class="bh-lockup brand-lockup">
+    <a class="bh-lockup-mark" href="/" aria-label="Вход — на главную сервиса">
+      <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <defs>
+          <linearGradient id="bhFlameInvite" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+            <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+          </linearGradient>
+        </defs>
+        <path class="bh-flame" fill="url(#bhFlameInvite)" fill-rule="evenodd"
+              d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+      </svg>
+    </a>
+    <a class="bh-lockup-name" href="https://burninghouse.ru" aria-label="BurningHouse — каталог сервисов">
+      <span class="bh-name">BurningHouse</span>
+    </a>
+  </div>
   <h1 id="friendInviteTitle">Добавляем в друзья…</h1>
   <p class="sub" id="friendInviteMsg"></p>
   <a class="btn filled full hidden" id="friendInviteContinue" href="https://burninghouse.ru">Готово</a>
@@ -213,21 +233,25 @@
 
 <!-- Аккаунт: то, что видит вошедший пользователь на самом auth-домене. -->
 <div class="card wide hidden" id="accountCard">
-  <a class="bh-lockup brand-lockup" href="https://burninghouse.ru">
-    <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-label="BurningHouse">
-      <defs>
-        <linearGradient id="bhFlameAccount" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
-          <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
-        </linearGradient>
-      </defs>
-      <path class="bh-flame" fill="url(#bhFlameAccount)" fill-rule="evenodd"
-            d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
-    </svg>
-    <span class="bh-name">BurningHouse</span>
-    <span class="bh-sep" aria-hidden="true"></span>
-    <span class="bh-service">Аккаунт</span>
-  </a>
+  <div class="bh-lockup brand-lockup">
+    <a class="bh-lockup-mark" href="/" aria-label="Вход — на главную сервиса">
+      <svg class="bh-mark" viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <defs>
+          <linearGradient id="bhFlameAccount" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stop-color="var(--flame-base, #c2410c)"/>
+            <stop offset="1" stop-color="var(--flame-tip, #ffa62b)"/>
+          </linearGradient>
+        </defs>
+        <path class="bh-flame" fill="url(#bhFlameAccount)" fill-rule="evenodd"
+              d="M12 1.2C13.6 5 16.4 6.6 18.2 9.4C21.4 14.4 18.6 22.4 12 22.4C5.4 22.4 2.6 14.4 5.8 9.4C7.2 7.2 9.2 6 10.2 3.4C10.9 5.6 11.4 6.6 12 7.4C12.4 5.6 12.3 3.4 12 1.2ZM12 9.8 7.4 13.6V19.2H16.6V13.6Z"/>
+      </svg>
+    </a>
+    <a class="bh-lockup-name" href="https://burninghouse.ru" aria-label="BurningHouse — каталог сервисов">
+      <span class="bh-name">BurningHouse</span>
+      <span class="bh-sep" aria-hidden="true"></span>
+      <span class="bh-service">Аккаунт</span>
+    </a>
+  </div>
   <div class="who">
     <div class="avatar" id="acAvatar">?</div>
     <div>
