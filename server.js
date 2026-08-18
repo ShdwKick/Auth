@@ -158,6 +158,20 @@ function authenticate(req) {
   return u && !u.disabled ? { user: u, via: "cookie", ssoId: sso.id } : null;
 }
 
+/**
+ * Как authenticate(), но CSRF-проверка (sameOrigin) применяется, только когда
+ * личность пришла из куки. Bearer сравнимым способом не подделать: чужая
+ * страница не может прочитать чужой токен, чтобы подставить его в заголовок
+ * Authorization — поэтому именно Bearer и открывает /api/friends/* другим
+ * сервисам (см. CORS_PATHS выше), а не только auth-кабинету на своей куке.
+ */
+function authenticateManaged(req) {
+  const auth = authenticate(req);
+  if (!auth) return { error: "unauthorized" };
+  if (auth.via === "cookie" && !H.sameOrigin(req)) return { error: "bad_origin" };
+  return { auth };
+}
+
 /** Общая часть логина и регистрации: кука + либо код авторизации, либо возврат на аккаунт. */
 function completeLogin(req, res, user, params) {
   const ssoId = store.createSso(user.id, { userAgent: H.userAgent(req), ip: H.clientIp(req) });
@@ -186,11 +200,20 @@ function sendVerificationEmail(userId, email) {
 
 /* ---------- маршруты ---------- */
 
-// /api/friends — только сам список (GET), не мутации: другому сервису (Trip
-// и т.п.) можно предложить друзей из BurningHouse по чужому access-токену,
-// но добавлять/принимать/удалять — только с самого auth-домена (см. ниже,
-// эти пути под /api/friends/... своего "$" нарочно не получают).
-const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo$|\/api\/friends$|\/\.well-known\/)/;
+// /api/friends/* целиком — и чтение, и управление (добавить/принять/удалить/
+// ссылка-приглашение) доступны другим сервисам по Bearer-токену, не только
+// auth-кабинету. CSRF для куки при этом всё равно проверяется — см.
+// authenticateManaged() выше: sameOrigin требуется, только когда личность
+// пришла из куки, а не из Bearer (его чужому origin взять неоткуда).
+const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo$|\/api\/friends(\/|$)|\/\.well-known\/)/;
+
+/** Разрешённые для CORS origin'ы — зарегистрированные клиенты плюс сам
+ *  auth-домен (для его собственных POST/DELETE к /api/friends/*, см. ниже). */
+function corsOrigins() {
+  const set = new Set(store.allowedOrigins());
+  set.add(cfg.ISSUER);
+  return set;
+}
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, cfg.ISSUER);
@@ -199,7 +222,12 @@ const server = http.createServer(async (req, res) => {
 
   // CORS — только для эндпоинтов, к которым ходят фронты других сервисов.
   if (CORS_PATHS.test(p)) {
-    if (!H.cors(req, res, store.allowedOrigins())) return H.json(res, 403, { error: "origin_not_allowed" });
+    // Свой собственный origin — не только зарегистрированные клиенты: раньше
+    // сюда попадал только GET (браузер не шлёт Origin на same-origin GET),
+    // а мутации /api/friends/* — POST/DELETE, на них Origin шлётся ВСЕГДА,
+    // даже с той же страницы. Без явного добавления кабинет не смог бы звать
+    // свои же POST/DELETE-ручки друзей.
+    if (!H.cors(req, res, corsOrigins())) return H.json(res, 403, { error: "origin_not_allowed" });
     if (method === "OPTIONS") { res.writeHead(204); return res.end(); }
   }
 
@@ -676,9 +704,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === "/api/friends/request" && method === "POST") {
-      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
-      const auth = authenticate(req);
-      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const auth = a.auth;
       const body = await H.readParams(req);
 
       const target = store.getUserByName(pwlib.normalizeUsername(body.username));
@@ -690,9 +718,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === "/api/friends/invite/regenerate" && method === "POST") {
-      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
-      const auth = authenticate(req);
-      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const auth = a.auth;
 
       const token = store.regenerateInviteToken(auth.user.id);
       return H.json(res, 200, { ok: true, inviteLink: `${cfg.ISSUER}/friends/invite?token=${token}` });
@@ -701,9 +729,9 @@ const server = http.createServer(async (req, res) => {
     // Переход по чужой персональной ссылке — сразу дружба, без отдельного
     // подтверждения (см. чат: «перешёл и вошёл — сразу друг», как в Trip).
     if (p === "/api/friends/invite/accept" && method === "POST") {
-      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
-      const auth = authenticate(req);
-      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const auth = a.auth;
       const body = await H.readParams(req);
 
       const owner = store.getUserByInviteToken(body.token);
@@ -721,9 +749,9 @@ const server = http.createServer(async (req, res) => {
     // /api/friends/<id>/accept и просто /api/friends/<id>.
     const friendAcceptMatch = p.match(/^\/api\/friends\/([\w-]+)\/accept$/);
     if (friendAcceptMatch && method === "POST") {
-      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
-      const auth = authenticate(req);
-      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const auth = a.auth;
 
       const r = store.acceptFriendRequest(friendAcceptMatch[1], auth.user.id);
       if (r.error) return H.json(res, 404, { error: r.error, message: FRIEND_ERR[r.error] || "Заявка не найдена" });
@@ -734,9 +762,9 @@ const server = http.createServer(async (req, res) => {
     // друзей» — везде физически одна и та же строка связи, см. store.js.
     const friendMatch = p.match(/^\/api\/friends\/([\w-]+)$/);
     if (friendMatch && method === "DELETE") {
-      if (!H.sameOrigin(req)) return H.json(res, 403, { error: "bad_origin" });
-      const auth = authenticate(req);
-      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const auth = a.auth;
 
       const removed = store.removeFriendship(friendMatch[1], auth.user.id);
       if (!removed) return H.json(res, 404, { error: "not_found" });
@@ -763,10 +791,12 @@ const server = http.createServer(async (req, res) => {
 
     if (p === "/internal/users" && method === "GET") {
       if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const lastSeen = store.lastSeenMap();
       return H.json(res, 200, {
         users: store.listUsers().map(u => ({
           id: u.id, username: u.username, email: u.email || null,
           createdAt: u.created_at, disabled: !!u.disabled, admin: !!u.is_admin,
+          lastSeen: lastSeen[u.id] || null,
         })),
       });
     }
