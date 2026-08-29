@@ -24,6 +24,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const cfg = require("./lib/config");
 const H = require("./lib/http");
@@ -172,10 +173,42 @@ function authenticateManaged(req) {
   return { auth };
 }
 
+// ───────── устройственная кука (bh_device) — см. Puzzle/server.js, тот же
+// приём: cookie на РОДИТЕЛЬСКОМ домене (.burninghouse.ru, не auth-хост),
+// чтобы её видели все сервисы семьи, не только Auth. Тут её не читает
+// никто, кроме completeLogin ниже — сама проверка "забанено ли" целиком у
+// вызывающих сервисов (см. GET /internal/devices/:id), Auth только реестр
+// и (тут) связывает устройство с аккаунтом на каждый вход.
+const DEVICE_COOKIE = "bh_device";
+const DEVICE_MAX_AGE = 60 * 60 * 24 * 365 * 1000; // мс, H.setCookie сам делит на 1000
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DEVICE_COOKIE_DOMAIN = (() => {
+  if (!cfg.COOKIE_SECURE) return null; // дев/localhost — нет поддоменов, host-only
+  try {
+    const host = new URL(cfg.ISSUER).hostname;
+    const parts = host.split(".");
+    return parts.length > 2 ? "." + parts.slice(1).join(".") : null;
+  } catch { return null; }
+})();
+function getOrCreateDeviceId(req, res) {
+  let id = H.cookies(req)[DEVICE_COOKIE];
+  if (!id || !UUID_RE.test(id)) {
+    id = crypto.randomUUID();
+    H.setCookie(res, DEVICE_COOKIE, id, { maxAge: DEVICE_MAX_AGE, domain: DEVICE_COOKIE_DOMAIN });
+  }
+  return id;
+}
+
 /** Общая часть логина и регистрации: кука + либо код авторизации, либо возврат на аккаунт. */
 function completeLogin(req, res, user, params) {
   const ssoId = store.createSso(user.id, { userAgent: H.userAgent(req), ip: H.clientIp(req) });
   H.setCookie(res, cfg.COOKIE_NAME, ssoId, { maxAge: cfg.SSO_TTL });
+  // Одна и та же кука на любой сервис семьи — если её уже выдал Puzzle (или
+  // сам Auth раньше), просто читаем и запоминаем связку; если это вообще
+  // первый визит куда-либо — заводим тут же, чтобы бан по устройству
+  // работал даже для тех, кто ни разу не был в Puzzle. См. план «Модерация
+  // загруженных фото».
+  store.recordUserDevice(user.id, getOrCreateDeviceId(req, res));
 
   if (!params) return H.json(res, 200, { ok: true, redirect: "/", user: store.publicUser(user) });
 
@@ -826,6 +859,30 @@ const server = http.createServer(async (req, res) => {
       return H.json(res, 200, { ok: true });
     }
 
+    // Все устройства, когда-либо логинившиеся под этим аккаунтом (см.
+    // completeLogin/user_devices выше) — видимость для Admin перед баном,
+    // и сам массовый бан одним вызовом (человек мог грузить нарушающие фото
+    // не с одного устройства).
+    const userDevicesMatch = p.match(/^\/internal\/users\/([\w-]+)\/devices$/);
+    if (userDevicesMatch && method === "GET") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const u = store.getUserById(userDevicesMatch[1]);
+      if (!u) return H.json(res, 404, { error: "not_found" });
+      return H.json(res, 200, {
+        devices: store.listUserDevices(u.id).map(d => ({ id: d.device_id, firstSeen: d.first_seen, lastSeen: d.last_seen })),
+      });
+    }
+    const userBanDevicesMatch = p.match(/^\/internal\/users\/([\w-]+)\/ban-devices$/);
+    if (userBanDevicesMatch && method === "POST") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const u = store.getUserById(userBanDevicesMatch[1]);
+      if (!u) return H.json(res, 404, { error: "not_found" });
+      const body = await H.readParams(req);
+      const count = store.banAllUserDevices(u.id, body.by || null, body.reason || null);
+      adminLog.warn("Забанены все устройства пользователя", { username: u.username, count });
+      return H.json(res, 200, { ok: true, count });
+    }
+
     const userLogoutMatch = p.match(/^\/internal\/users\/([\w-]+)\/logout-all$/);
     if (userLogoutMatch && method === "POST") {
       if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
@@ -848,6 +905,34 @@ const server = http.createServer(async (req, res) => {
       if (!u) return H.json(res, 404, { error: "not_found" });
       store.deleteUser(u.id);
       adminLog.warn("Аккаунт удалён", { username: u.username, id: u.id });
+      return H.json(res, 200, { ok: true });
+    }
+
+    // Реестр банов по устройству (см. lib/db.js "devices") — общий для всей
+    // семьи, opaque cookie-id, не привязан к конкретному сервису. Первым
+    // зовёт Puzzle (модерация загруженных фото): на каждой загрузке спрашивает
+    // GET, админ банит через POST .../banned из Admin. by/reason — то, что
+    // прислал вызывающий сервис, Auth его не проверяет и не обязывает.
+    if (p === "/internal/devices" && method === "GET") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      return H.json(res, 200, {
+        devices: store.listBannedDevices().map(d => ({
+          id: d.id, firstSeen: d.first_seen, bannedAt: d.banned_at, bannedBy: d.banned_by, reason: d.reason,
+        })),
+      });
+    }
+    const deviceMatch = p.match(/^\/internal\/devices\/([\w-]+)$/);
+    if (deviceMatch && method === "GET") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const d = store.getDevice(deviceMatch[1]);
+      return H.json(res, 200, { id: deviceMatch[1], banned: !!(d && d.banned), reason: (d && d.reason) || null });
+    }
+    const deviceBanMatch = p.match(/^\/internal\/devices\/([\w-]+)\/banned$/);
+    if (deviceBanMatch && method === "POST") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const body = await H.readParams(req);
+      store.setDeviceBanned(deviceBanMatch[1], !!body.on, body.by || null, body.reason || null);
+      adminLog.warn(`${body.on ? "Забанено" : "Разбанено"} устройство`, { deviceId: deviceBanMatch[1], by: body.by || null });
       return H.json(res, 200, { ok: true });
     }
 
