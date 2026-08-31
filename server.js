@@ -79,8 +79,27 @@ if (store.countUsers() === 0 && process.env.AUTH_USER && process.env.AUTH_PASS) 
 const loginLimiter = H.createLimiter({ max: cfg.LOGIN_MAX_ATTEMPTS, windowMs: cfg.LOGIN_WINDOW });
 const tokenLimiter = H.createLimiter({ max: 120, windowMs: 60 * 1000 });
 const forgotLimiter = H.createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
+const notifyLimiter = H.createLimiter({ max: 60, windowMs: 60 * 1000 });
 
 setInterval(() => store.purgeExpired(), 60 * 60 * 1000).unref();
+
+/* ---------- SSE-подписки на уведомления ---------- */
+// userId -> Set<ServerResponse>. Один процесс — держим прямо в памяти, без
+// брокера; при рестарте контейнера клиенты просто переподключатся (SSE это
+// умеет из коробки через retry). Так как события летят из store.js для ЛЮБОГО
+// источника (auth сам себе, другой сервис по /api/notifications) — достаточно
+// подписаться в одном месте, а не дублировать push в каждой ручке-создателе.
+const sseClients = new Map();
+store.onNotification(notif => {
+  const set = sseClients.get(notif.userId);
+  if (!set || !set.size) return;
+  const payload = JSON.stringify({
+    id: notif.id, source: notif.source, type: notif.type, title: notif.title,
+    body: notif.body, url: notif.url, createdAt: notif.createdAt, readAt: notif.readAt,
+  });
+  const chunk = `event: notification\ndata: ${payload}\n\n`;
+  for (const res of set) { try { res.write(chunk); } catch { /* соединение уже мертво, close его подчистит */ } }
+});
 
 /* ---------- вспомогательное ---------- */
 
@@ -144,19 +163,21 @@ function ssoFromRequest(req) {
   return row;
 }
 
-/** Пользователь запроса: сначала Bearer access-токен, иначе SSO-кука (страницы самого auth). */
+/** Пользователь запроса: сначала Bearer access-токен, иначе SSO-кука (страницы самого auth).
+ *  aud — client_id сервиса, выпустившего токен; для /api/notifications это и есть
+ *  доверенный "source" уведомления (см. ниже) — подделать нельзя, он в подписи. */
 function authenticate(req) {
   const t = H.bearer(req);
   if (t) {
     const p = tokens.verifyAccess(t);
     if (!p) return null;
     const u = store.getUserById(p.sub);
-    return u && !u.disabled ? { user: u, via: "token", sid: p.sid } : null;
+    return u && !u.disabled ? { user: u, via: "token", sid: p.sid, aud: p.aud } : null;
   }
   const sso = ssoFromRequest(req);
   if (!sso) return null;
   const u = store.getUserById(sso.user_id);
-  return u && !u.disabled ? { user: u, via: "cookie", ssoId: sso.id } : null;
+  return u && !u.disabled ? { user: u, via: "cookie", ssoId: sso.id, aud: "auth" } : null;
 }
 
 /**
@@ -238,7 +259,7 @@ function sendVerificationEmail(userId, email) {
 // auth-кабинету. CSRF для куки при этом всё равно проверяется — см.
 // authenticateManaged() выше: sameOrigin требуется, только когда личность
 // пришла из куки, а не из Bearer (его чужому origin взять неоткуда).
-const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo$|\/api\/friends(\/|$)|\/\.well-known\/)/;
+const CORS_PATHS = /^(\/oauth\/|\/api\/userinfo$|\/api\/friends(\/|$)|\/api\/notifications(\/|$)|\/\.well-known\/)/;
 
 /** Разрешённые для CORS origin'ы — зарегистрированные клиенты плюс сам
  *  auth-домен (для его собственных POST/DELETE к /api/friends/*, см. ниже). */
@@ -802,6 +823,116 @@ const server = http.createServer(async (req, res) => {
       const removed = store.removeFriendship(friendMatch[1], auth.user.id);
       if (!removed) return H.json(res, 404, { error: "not_found" });
       return H.json(res, 200, { ok: true });
+    }
+
+    /* --- уведомления ---
+     * Как /api/friends/* — доступны другим сервисам по Bearer, не только
+     * auth-кабинету (см. CORS_PATHS выше). Создать может любой валидный
+     * Bearer, но source при этом НЕ из тела запроса, а из aud токена (см.
+     * authenticate()) — сервис физически не может представиться чужим
+     * именем. Канал СИСТЕМНЫХ уведомлений о конкретных событиях («вам заявка
+     * в друзья», «фото одобрено») — не личные сообщения: type/title задаёт
+     * код вызывающего сервиса под конкретное событие, а не свободный текст,
+     * который один пользователь пишет другому. Пример подключения — события
+     * дружбы в lib/store.js (notifyFriendEvent). */
+
+    if (p === "/api/notifications" && method === "GET") {
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+      const unreadOnly = url.searchParams.get("unread") === "1";
+      return H.json(res, 200, {
+        notifications: store.listNotifications(auth.user.id, { unreadOnly }),
+        unread: store.unreadNotificationCount(auth.user.id),
+      });
+    }
+
+    if (p === "/api/notifications" && method === "POST") {
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const auth = a.auth;
+      if (notifyLimiter.hit(`${auth.aud}|${auth.user.id}`)) return H.json(res, 429, { error: "slow_down" });
+
+      const body = await H.readParams(req);
+      const userId = String(body.userId || "");
+      const type = String(body.type || "").slice(0, 60);
+      const title = String(body.title || "").slice(0, 300);
+      if (!userId || !type || !title) {
+        return H.json(res, 400, { error: "invalid", message: "userId, type и title обязательны" });
+      }
+      const recipient = store.getUserById(userId);
+      if (!recipient || recipient.disabled) return H.json(res, 404, { error: "not_found", message: "Такого user_id нет" });
+
+      const id = store.createNotification({
+        userId, source: auth.aud || "auth", type, title,
+        body: body.body ? String(body.body).slice(0, 2000) : null,
+        url: body.url ? String(body.url).slice(0, 500) : null,
+      });
+      return H.json(res, 200, { ok: true, id });
+    }
+
+    if (p === "/api/notifications/read-all" && method === "POST") {
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const changed = store.markAllNotificationsRead(a.auth.user.id);
+      return H.json(res, 200, { ok: true, changed });
+    }
+
+    // /read идёт РАНЬШЕ общего /api/notifications/:id — та же причина, что у
+    // /api/friends/<id>/accept выше.
+    const notifReadMatch = p.match(/^\/api\/notifications\/([\w-]+)\/read$/);
+    if (notifReadMatch && method === "POST") {
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const ok = store.markNotificationRead(notifReadMatch[1], a.auth.user.id);
+      if (!ok) return H.json(res, 404, { error: "not_found" });
+      return H.json(res, 200, { ok: true });
+    }
+
+    const notifMatch = p.match(/^\/api\/notifications\/([\w-]+)$/);
+    if (notifMatch && method === "DELETE") {
+      const a = authenticateManaged(req);
+      if (a.error) return H.json(res, a.error === "bad_origin" ? 403 : 401, { error: a.error });
+      const removed = store.deleteNotification(notifMatch[1], a.auth.user.id);
+      if (!removed) return H.json(res, 404, { error: "not_found" });
+      return H.json(res, 200, { ok: true });
+    }
+
+    // Живой поток новых уведомлений (SSE). EventSource из браузера не умеет
+    // слать заголовок Authorization — поэтому это ручка для fetch() +
+    // чтения response.body построчно (auth.fetch уже подставляет Bearer и
+    // обновляет токен), а не для конструктора EventSource напрямую.
+    // Сама ручка не пишет в БД и не меняет состояние — GET, но не мутация,
+    // те же правила CORS/Bearer, что у GET /api/friends.
+    if (p === "/api/notifications/stream" && method === "GET") {
+      const auth = authenticate(req);
+      if (!auth) return H.json(res, 401, { error: "unauthorized" });
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no", // nginx: не буферизовать поток за прокси
+      });
+      res.write(": connected\n\n");
+
+      const uid = auth.user.id;
+      if (!sseClients.has(uid)) sseClients.set(uid, new Set());
+      sseClients.get(uid).add(res);
+
+      // Комментарий-пинг раз в 25с — держит соединение живым через nginx
+      // (обычный proxy_read_timeout — 60с) и даёт быстро заметить обрыв.
+      const heartbeat = setInterval(() => {
+        try { res.write(": ping\n\n"); } catch { /* закроется по req "close" ниже */ }
+      }, 25000).unref();
+
+      req.on("close", () => {
+        clearInterval(heartbeat);
+        const set = sseClients.get(uid);
+        if (!set) return;
+        set.delete(res);
+        if (!set.size) sseClients.delete(uid);
+      });
+      return; // соединение остаётся открытым — res.end() не вызываем
     }
 
     /* --- внутренние ручки для Admin: server-to-server, проверка общим

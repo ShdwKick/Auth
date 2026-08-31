@@ -12,6 +12,7 @@
 - [Серверная часть](#серверная-часть)
 - [Клиентская часть](#клиентская-часть)
 - [Друзья](#друзья-список-для-приглашений-не-полноценный-профиль)
+- [Уведомления](#уведомления)
 - [Хранение user_id](#хранение-user_id)
 - [Чек-лист перед выкатом](#чек-лист-перед-выкатом)
 - [Если что-то не работает](#если-что-то-не-работает)
@@ -250,6 +251,117 @@ auth-домена — Bearer-токен извне подделать сравн
 поэтому для сервисов, вызывающих это со своего бэкенда или фронта через
 Bearer, никаких дополнительных требований нет — обычный `auth.fetch`.
 
+### Уведомления
+
+Централизованный канал системных уведомлений: сервис создаёт уведомление
+конкретному пользователю (по `user_id`), а получатель (тот же сервис, другой
+сервис или сам auth-кабинет) читает и гасит его через тот же access-токен —
+никакой отдельной авторизации, как и у `/api/friends`.
+
+**Это канал о СОБЫТИЯХ, а не личные сообщения.** `type` и `title` формирует
+код вашего сервиса под конкретное событие («заявка в друзья», «фото
+одобрено», «добавили в поездку») — не давайте пользователю свободно вписать
+текст, который увидит другой пользователь: это уже отдельная фича (чат),
+её тут нет.
+
+`source` в ответе — не то, что вы присылаете в теле запроса, а `client_id` из
+`aud` вашего собственного токена: представиться чужим сервисом нельзя, это
+тот же принцип, что и у остальных claim'ов токена.
+
+```
+GET https://auth.burninghouse.ru/api/notifications
+Authorization: Bearer <access_token>
+```
+
+```json
+{
+  "notifications": [
+    { "id": "…", "source": "movies", "type": "movies.comment", "title": "Боб прокомментировал ваше фото",
+      "body": null, "url": "https://movies.burninghouse.ru/p/42", "createdAt": 1788170777467, "readAt": null }
+  ],
+  "unread": 1
+}
+```
+
+`?unread=1` — только непрочитанные, вместо последних 100 (сортировка новые
+сверху в обоих случаях).
+
+| Метод и путь | Тело | Что делает |
+|---|---|---|
+| `POST /api/notifications` | `{userId, type, title, body?, url?}` | Создать уведомление получателю `userId`. `type`/`title` обязательны, `source` подставится сам из токена |
+| `POST /api/notifications/<id>/read` | — | Отметить прочитанным |
+| `POST /api/notifications/read-all` | — | Отметить прочитанными все свои |
+| `DELETE /api/notifications/<id>` | — | Удалить (можно только своё — чужой `id` вернёт `not_found`, не покажет, что уведомление вообще существует) |
+
+```bash
+curl -X POST https://auth.burninghouse.ru/api/notifications \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"userId":"<uuid получателя>","type":"movies.comment","title":"Боб прокомментировал ваше фото","url":"https://movies.burninghouse.ru/p/42"}'
+```
+
+Соглашение по `type`: namespace именем сервиса — `movies.comment`,
+`trip.expense_added` и т.п., чтобы разные сервисы не столкнулись в одном
+пространстве имён. У самого auth без префикса: `friend_request`,
+`friend_accept` — их порождают события дружбы (см. `notifyFriendEvent` в
+`lib/store.js`), это же и есть готовый пример подключения, если нужен образец.
+
+Ограничения по размеру (обрезаются молча, не ошибка): `type` — 60 символов,
+`title` — 300, `body` — 2000, `url` — 500. `POST /api/notifications` ограничен
+60 запросами в минуту на пару (сервис, пользователь) — этого достаточно для
+событий, но не для потоковой рассылки.
+
+#### Живой поток (SSE), чтобы не поллить
+
+```
+GET https://auth.burninghouse.ru/api/notifications/stream
+Authorization: Bearer <access_token>
+```
+
+Держит соединение открытым и присылает каждое новое уведомление получателя
+сразу, как оно появится — независимо от того, какой сервис его создал.
+Канал один на пользователя (не на сервис): открыл вкладку любого сервиса семьи
+— увидишь уведомления от всех остальных, столько раз подключаться, сколько
+сервисов открыто одновременно, не нужно, но и вреда от этого нет (просто
+несколько параллельных соединений).
+
+Формат — обычный `text/event-stream`:
+
+```
+event: notification
+data: {"id":"…","source":"movies","type":"movies.comment","title":"…","body":null,"url":"…","createdAt":1788172226115,"readAt":null}
+
+```
+
+Строки, начинающиеся с `:`, — комментарии-пинги раз в 25 секунд (держат
+соединение через nginx), их можно игнорировать.
+
+**Не через `new EventSource(...)`** — этот браузерный API не умеет добавить
+заголовок `Authorization`, а токен в query string класть не стоит (осядет в
+логах прокси и истории браузера, см. [«Что делать НЕ надо»](#что-делать-не-надо)
+ниже). Читайте поток через `fetch` + `response.body`, тем же `auth.fetch`, что
+и остальные запросы (он уже подставляет Bearer и обновляет токен):
+
+```js
+const res = await auth.fetch("/api/notifications/stream");
+const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+let buf = "";
+for (;;) {
+  const { value, done } = await reader.read();
+  if (done) break; // соединение оборвалось — переподключайтесь сами (с задержкой)
+  buf += value;
+  const parts = buf.split("\n\n");
+  buf = parts.pop(); // последний кусок может быть неполным
+  for (const part of parts) {
+    const line = part.split("\n").find(l => l.startsWith("data: "));
+    if (line) onNotification(JSON.parse(line.slice(6)));
+  }
+}
+```
+
+Поток отдаёт только то, что появилось ПОСЛЕ подключения — начальное состояние
+(и пропущенное, пока вкладка была закрыта) по-прежнему читайте обычным
+`GET /api/notifications` при загрузке страницы.
+
 ### Что НЕ нужно делать на бэкенде
 
 - Не проксировать логин/пароль — их не должно быть в вашем коде вообще.
@@ -437,6 +549,10 @@ node -e 'console.log(JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base6
 | `GET /api/userinfo` | по Bearer | `{id, username, email, name}` — `name` только если включён показ |
 | `GET /api/friends` | по Bearer | `{friends, incoming, outgoing, inviteLink}` — см. [Друзья](#друзья-список-для-приглашений-не-полноценный-профиль) выше |
 | `/api/friends/request`, `/…/<id>/accept`, `DELETE /api/friends/<id>`, `/…/invite/*` | по Bearer | Управление списком — заявки, принятие, удаление, ссылка-приглашение; см. [Управление — тоже по Bearer](#управление--тоже-по-bearer-не-только-из-кабинета) там же |
+| `GET /api/notifications` | по Bearer | `{notifications, unread}`, опц. `?unread=1` — см. [Уведомления](#уведомления) |
+| `POST /api/notifications` | по Bearer | `{userId, type, title, body?, url?}` → создать уведомление получателю |
+| `POST /api/notifications/<id>/read`, `/read-all`, `DELETE /api/notifications/<id>` | по Bearer | Отметить прочитанным / все прочитанными / удалить — только своё |
+| `GET /api/notifications/stream` | по Bearer, `fetch` (не `EventSource`) | SSE-поток новых уведомлений в реальном времени |
 | `GET /logout` | браузер (переход) | гасит сессию; `post_logout_redirect_uri` — только на зарегистрированный origin |
 | `GET /.well-known/openid-configuration` | — | адреса всех эндпоинтов |
 
