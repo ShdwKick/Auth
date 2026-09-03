@@ -1039,6 +1039,37 @@ const server = http.createServer(async (req, res) => {
       return H.json(res, 200, { ok: true });
     }
 
+    // Создание уведомления по X-Admin-Key, не по Bearer (см. /api/notifications
+    // POST выше) — для случаев, когда СОЗДАЁТ уведомление не сам сервис-адресат
+    // события от лица залогиненного пользователя, а третья сторона server-to-
+    // server (Admin, одобряя/отклоняя чужую публикацию — у него нет и не может
+    // быть токена автора фото). source тут поэтому берём из ТЕЛА запроса, не
+    // из auth.aud токена (тут его просто нет) — вызывающий сам называет себя,
+    // подделать чужой userId это не даёт (тот всё равно должен существовать),
+    // максимум подделать можно только "source" другого сервиса — тот же риск,
+    // что и у любого другого /internal/* эндпоинта, доверенного по ключу.
+    if (p === "/internal/notifications" && method === "POST") {
+      if (!checkAdminKey(req)) return H.json(res, 403, { error: "forbidden" });
+      const body = await H.readParams(req);
+      const userId = String(body.userId || "");
+      const type = String(body.type || "").slice(0, 60);
+      const title = String(body.title || "").slice(0, 300);
+      if (!userId || !type || !title) {
+        return H.json(res, 400, { error: "invalid", message: "userId, type и title обязательны" });
+      }
+      const recipient = store.getUserById(userId);
+      if (!recipient || recipient.disabled) return H.json(res, 404, { error: "not_found", message: "Такого user_id нет" });
+
+      const source = String(body.source || "").slice(0, 60) || "internal";
+      const id = store.createNotification({
+        userId, source, type, title,
+        body: body.body ? String(body.body).slice(0, 2000) : null,
+        url: body.url ? String(body.url).slice(0, 500) : null,
+      });
+      adminLog.info("Создано уведомление сервисом", { source, userId, type });
+      return H.json(res, 200, { ok: true, id });
+    }
+
     // Реестр банов по устройству (см. lib/db.js "devices") — общий для всей
     // семьи, opaque cookie-id, не привязан к конкретному сервису. Первым
     // зовёт Puzzle (модерация загруженных фото): на каждой загрузке спрашивает
