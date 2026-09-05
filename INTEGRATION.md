@@ -301,9 +301,12 @@ curl -X POST https://auth.burninghouse.ru/api/notifications \
 
 Соглашение по `type`: namespace именем сервиса — `movies.comment`,
 `trip.expense_added` и т.п., чтобы разные сервисы не столкнулись в одном
-пространстве имён. У самого auth без префикса: `friend_request`,
-`friend_accept` — их порождают события дружбы (см. `notifyFriendEvent` в
-`lib/store.js`), это же и есть готовый пример подключения, если нужен образец.
+пространстве имён. У самого auth без префикса: `friend_request` (прислали
+заявку), `friend_accept` (заявку или приглашение приняли), `friend_declined`
+(входящую заявку отклонили — только этот случай, не отмену своей исходящей
+и не разрыв дружбы, см. комментарий у `removeFriendship`) — их порождают
+события дружбы (см. `notifyFriendEvent` в `lib/store.js`), это же и есть
+готовый пример подключения, если нужен образец.
 
 Ограничения по размеру (обрезаются молча, не ошибка): `type` — 60 символов,
 `title` — 300, `body` — 2000, `url` — 500. `POST /api/notifications` ограничен
