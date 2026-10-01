@@ -26,7 +26,9 @@ let session = null;        // { authenticated, user, registerClosed, registerCod
 /* Пришли по ссылке-приглашению в друзья, но ещё не вошли — форма логина
    покажется как обычно, но после входа нужно вернуться СЮДА (не туда, куда
    сервер обычно ведёт "/"), чтобы дружба оформилась сама, а не потерялась. */
-const inviteReturn = location.pathname === "/friends/invite" ? location.pathname + location.search : null;
+// Пауза перед автовозвратом в сервис после принятия приглашения — успеть прочитать «Готово!».
+const INVITE_RETURN_DELAY_MS = 2500;
+const inviteReturn =location.pathname === "/friends/invite" ? location.pathname + location.search : null;
 
 /* ---------- тема ---------- */
 
@@ -664,6 +666,20 @@ async function skipEmailPrompt() {
     $("friendInviteMsg").textContent = ok
       ? `Вы и ${data.friend.name} ${data.already ? "уже " : ""}друзья на BurningHouse.`
       : (data.message || "Ссылка недействительна.");
+
+    // from — client_id сервиса, где создали ссылку: возвращаем человека туда.
+    // Адрес берём у auth (/api/client), а не из ссылки — открытого редиректа нет.
+    const from = params.get("from");
+    const back = from ? await api(`/api/client?client_id=${encodeURIComponent(from)}`) : null;
+    const cont = $("friendInviteContinue");
+    if (back?.ok && back.data.url) {
+      cont.href = back.data.url;
+      cont.textContent = `Вернуться в «${back.data.name}»`;
+      if (ok) {
+        $("friendInviteMsg").textContent += " Возвращаем вас обратно…";
+        setTimeout(() => location.replace(back.data.url), INVITE_RETURN_DELAY_MS);
+      }
+    }
     show("friendInviteContinue", true);
     return;
   }

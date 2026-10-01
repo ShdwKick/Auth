@@ -163,6 +163,22 @@ function ssoFromRequest(req) {
   return row;
 }
 
+/** Главная сервиса — origin его первого зарегистрированного redirect_uri.
+ *  null, если у клиента нет адреса или он кривой. */
+function clientHome(client) {
+  try { return new URL(client.redirect_uris[0]).origin + "/"; } catch { return null; }
+}
+
+/** Ссылка-приглашение в друзья. Если её запросил сервис (aud токена —
+ *  его client_id), в ссылку добавляется from: после принятия приглашения
+ *  человек вернётся в этот сервис, а не на каталог BurningHouse. Из кабинета
+ *  самого auth (aud = "auth") — ссылка без from, как раньше. */
+function inviteLinkFor(token, aud) {
+  const base = `${cfg.ISSUER}/friends/invite?token=${token}`;
+  const client = aud && aud !== "auth" ? store.getClient(aud) : null;
+  return client && clientHome(client) ? `${base}&from=${encodeURIComponent(client.client_id)}` : base;
+}
+
 /** Пользователь запроса: сначала Bearer access-токен, иначе SSO-кука (страницы самого auth).
  *  aud — client_id сервиса, выпустившего токен; для /api/notifications это и есть
  *  доверенный "source" уведомления (см. ниже) — подделать нельзя, он в подписи. */
@@ -531,10 +547,13 @@ const server = http.createServer(async (req, res) => {
 
     // Название сервиса для заголовка формы («Вход в „Мои финансы“»). id клиента и так
     // виден в адресной строке — секрета тут нет.
+    // url — главная сервиса: страница приглашения в друзья возвращает туда
+    // (см. inviteLinkFor). Выводится из зарегистрированного redirect_uri,
+    // а не берётся из адреса — открытого редиректа нет.
     if (p === "/api/client" && method === "GET") {
       const c = store.getClient(url.searchParams.get("client_id"));
       if (!c) return H.json(res, 404, { error: "unknown_client" });
-      return H.json(res, 200, { client_id: c.client_id, name: c.name });
+      return H.json(res, 200, { client_id: c.client_id, name: c.name, url: clientHome(c) });
     }
 
     // Кто вошёл в браузере — этим страница аккаунта решает, что показывать.
@@ -753,7 +772,7 @@ const server = http.createServer(async (req, res) => {
         friends: store.listFriends(auth.user.id),
         incoming: store.listIncomingRequests(auth.user.id),
         outgoing: store.listOutgoingRequests(auth.user.id),
-        inviteLink: `${cfg.ISSUER}/friends/invite?token=${store.getOrCreateInviteToken(auth.user.id)}`,
+        inviteLink: inviteLinkFor(store.getOrCreateInviteToken(auth.user.id), auth.aud),
       });
     }
 
@@ -777,7 +796,7 @@ const server = http.createServer(async (req, res) => {
       const auth = a.auth;
 
       const token = store.regenerateInviteToken(auth.user.id);
-      return H.json(res, 200, { ok: true, inviteLink: `${cfg.ISSUER}/friends/invite?token=${token}` });
+      return H.json(res, 200, { ok: true, inviteLink: inviteLinkFor(token, auth.aud) });
     }
 
     // Переход по чужой персональной ссылке — сразу дружба, без отдельного
