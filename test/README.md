@@ -8,6 +8,7 @@
 
 ```bash
 node test/legacy-passwords.mjs   # перенос паролей из «Моих финансов» (сети не требует)
+node test/browser-client.mjs     # браузерный auth-client без сети не разлогинивает (сети не требует)
 node test/flow.mjs               # сам auth-сервис; занимает порт 8788
 node test/e2e.mjs                # auth + Финансы вместе; занимает 8787 и 8788
 ```
