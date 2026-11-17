@@ -220,6 +220,20 @@
   60%   { transform:scale(1.6) rotate(6deg); opacity:0 }
   100%  { opacity:0 }
 }
+/* инвентарь: искра поднимается, замирает — и гаснет, не долетев доверху.
+   Чем выше успела подняться, тем дольше висела: у всего есть срок, и
+   кончается он не тогда, когда вещь израсходована. Единственная повадка, где
+   искра не уходит за верхний край: уход за кадр читался бы как «улетела», а
+   нужно «погасла здесь». */
+.bh-sparks--expire .bh-spark{ animation-name:bh-expire; animation-timing-function:cubic-bezier(.22,.61,.36,1) }
+@keyframes bh-expire{
+  0%  { transform:translate3d(0,0,0) scale(.55); opacity:0 }
+  10% { opacity:.85 }
+  55% { transform:translate3d(var(--bh-drift,1rem), -34vh, 0) scale(.9); opacity:.8 }
+  80% { transform:translate3d(var(--bh-drift,1rem), -38vh, 0) scale(.9); opacity:.7 }
+  92% { transform:translate3d(var(--bh-drift,1rem), -39vh, 0) scale(.5); opacity:.12 }
+  100%{ transform:translate3d(var(--bh-drift,1rem), -39vh, 0) scale(.3); opacity:0 }
+}
 
 /* ═══ ЗНАК ═══
    Градиент объявляется ВНУТРИ каждого <svg>: вынесенный наружу не увидит
